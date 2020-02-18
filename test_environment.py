@@ -5,9 +5,9 @@ def main():
     system_minor = sys.version_info.minor
     required_major = 3
     required_minor = 6
-    print('checking python version major == 3 and minor version  >= 6')
+    print('checking python version major == 3 and minor version  == 6')
     print(sys.version_info)
-    if system_major != required_major or system_minor < required_minor:
+    if system_major != required_major or system_minor != required_minor:
         raise('incorrect version. Please install python 3.6')
 
     print('importing packages')
