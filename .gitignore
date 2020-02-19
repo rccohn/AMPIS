@@ -91,3 +91,7 @@ target/
 
 # Virtual environment files
 /ampis_venv/
+
+# logs
+/logs/*.log
+/logs/*.txt

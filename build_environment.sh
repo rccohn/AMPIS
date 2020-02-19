@@ -1,5 +1,5 @@
 # create and activate virtual environment
-python3 -m venv ampis_venv
+python3.6 -m venv ampis_venv
 source ampis_venv/bin/activate
 
 # install dependencies
