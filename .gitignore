@@ -95,3 +95,4 @@ target/
 # logs
 /logs/*.log
 /logs/*.txt
+/notebooks/output/
