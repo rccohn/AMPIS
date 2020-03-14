@@ -26,13 +26,29 @@ import skimage.io
 ## detectron2
 from detectron2 import model_zoo
 from detectron2.checkpoint import Checkpointer, PeriodicCheckpointer
+from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import DatasetCatalog, MetadataCatalog
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.structures import BoxMode
 from detectron2.utils.visualizer import Visualizer
+from detectron2.utils.events import (
+    CommonMetricPrinter,
+    EventStorage,
+    JSONWriter,
+    TensorboardXWriter,
+)
+from detectron2.solver import build_lr_scheduler, build_optimizer
+from detectron2.data import (
+    MetadataCatalog,
+    build_detection_test_loader,
+    build_detection_train_loader,
+)
 
-
+from detectron2.modeling import build_model
+import detectron2.utils.comm as comm
+import dataval # custom module for getting loss stats
+ 
 # verify cuda is installed and running correctly
 import torch
 from torch.utils.cpp_extension import CUDA_HOME
@@ -95,8 +111,7 @@ def get_data_dicts(json_path):
             py = anno["all_points_y"]
             poly = [(x + 0.5, y + 0.5) for x, y in zip(px, py)]
             poly = [p for x in poly for p in x]
-            
-            
+                     
             obj = {
                 "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
                 "bbox_mode": BoxMode.XYXY_ABS, # boxes are given in absolute coordinates (ie not corner+width+height)
@@ -238,32 +253,70 @@ print('checkpoint paths found:\n\t{}'.format('\n\t'.join([x.name for x in checkp
 
 ## visualize predictions of final model
 
+val_dir = os.path.join(str(cfg.OUTPUT_DIR)+'_validation')
+os.makedirs(val_dir, exist_ok=True)
+writers = ([
+ CommonMetricPrinter(cfg.SOLVER.MAX_ITER),
+            JSONWriter(os.path.join(val_dir, "metrics_validation.json")),
+            TensorboardXWriter(val_dir),
+])
+
+data_val = dataval.build_detection_val_loader(cfg, None, ['powder_Validation'])
+
 for p in checkpoint_paths:
-    # make directory for output mask predictions
-    outdir = '../figures/masks/predictions/{}'.format(p.stem)
-    os.makedirs(outdir, exist_ok=True)
     cfg.MODEL.WEIGHTS = os.path.join(p)
-    predictor = DefaultPredictor(cfg)
-    for dataset in ['powder_Training', 'powder_Validation']:
-        for d in DatasetCatalog.get(dataset):
-            img_path = pathlib.Path(d['file_name'])
-            print('image filename: {}'.format(img_path.name))
-            img = cv2.imread(str(img_path))
-             
+    model = build_model(cfg)
+    
+    optimizer = build_optimizer(cfg, model)
+    scheduler = build_lr_scheduler(cfg, optimizer)
+
+    checkpointer = DetectionCheckpointer(
+    model, val_dir, optimizer=optimizer, scheduler=scheduler
+    )
+    start_iter = (
+    checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=True).get("iteration", -1) + 1
+    )
+
+    with EventStorage(start_iter) as storage:
+        for data in data_val:
+              
+            storage.step()
+            loss_dict = model(data)
+            losses = sum(loss_dict.values())
+
+            assert torch.isfinite(losses).all(), loss_dict
+
+            loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+            if comm.is_main_process():
+                storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
+            
+            for writer in writers:
+                writer.write()
+
+
+        ### visualization of masks
+        # make directory for output mask predictions
+        outdir = '../figures/masks/predictions/{}'.format(p.stem)
+        os.makedirs(outdir, exist_ok=True)
+        predictor = DefaultPredictor(cfg)
+        for dataset in ['powder_Training', 'powder_Validation']:
+            for d in DatasetCatalog.get(dataset): # TODO  replace with datasetloader
+                img_path = pathlib.Path(d['file_name'])
+                print('image filename: {}'.format(img_path.name))
+                img = cv2.imread(str(img_path))
+            
             out = predictor(img)
             v = Visualizer(img, metadata=MetadataCatalog.get(dataset))
             draw = v.draw_instance_predictions(out['instances'].to('cpu'))
             
             fig, ax = plt.subplots(figsize=(10,5), dpi=300)
             ax.imshow(draw.get_image())
-            ax.axis('off')
-            title = '{}\nnum_instances:{}\n{}'.format(dataset, len(out['instances']), img_path.stem)
             ax.set_title(title)
             fig.tight_layout()
             print(outdir, title, '.png')
             
             fig.savefig(pathlib.Path(outdir, title.replace('\n','_')))
             plt.close('all')
-            del img
 
 
