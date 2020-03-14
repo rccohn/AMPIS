@@ -96,3 +96,6 @@ target/
 /logs/*.log
 /logs/*.txt
 /notebooks/output/
+
+# figures
+# /figures/
