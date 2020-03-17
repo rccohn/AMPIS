@@ -6,97 +6,6 @@ import skimage.morphology
 
 
 
-
-def IOU(true_mask, predicted_mask):
-    """
-    Computes Intersection Over Union score for binary segmentation masks true_mask
-    and predicted_mask. Note that both masks must have the same shape for them to be compared.
-    IOU is defined as (A and B).sum()/(A or B).sum().
-    If the union is 0 (both masks are empty), the IOU score is assumed to be 0
-    in order to prevent divide by 0 error.
-    Note that because intersection and union are symmetric, the function will
-    still work correctly if true_mask and predicted_mask are switched with each other.
-    :param true_mask: numpy array containing ground truth binary segmentation mask
-    :param predicted mask: numpy array containing predicted binary segmentation mask
-    """
-    assert true_mask.shape == predicted_mask.shape  # masks must be same shape for comparison
-    union = np.logical_or(true_mask, predicted_mask).sum()
-    if union == 0:  # both masks are empty
-        return 0.
-    intersection = np.logical_and(true_mask, predicted_mask).sum()
-    return intersection / union
-
-
-def precision(true_mask, predicted_mask):
-    """
-    Computes precision score for binary segmentation masks true_mask
-    and predicted_mask. Note that both masks must have the same shape for them to be evaluated.
-    Precision is defined as (true positive)/(true positive+false positive). In the case both masks
-    are empty (true positive = false positive = 0), the function returns 0 to prevent
-    divide by zero error.
-    :param true_mask: numpy array containing ground truth binary segmentation mask
-    :param predicted mask: numpy array containing predicted binary segmentation mask
-    """
-    assert true_mask.shape == predicted_mask.shape  # masks must be same shape for comparison
-    if predicted_mask.sum() == 0:  # no positive predictions, prevent divide by 0 error
-        return 0.
-
-    true_positive = np.logical_and(true_mask, predicted_mask).sum()  # true==1 and predict==1
-    false_positive = np.logical_and(np.logical_not(true_mask), predicted_mask).sum()  # true==0 and predict==1
-
-    return true_positive / (true_positive + false_positive)
-
-
-def recall(true_mask, predicted_mask):
-    """
-    Computes recall score for binary segmentation masks true_mask
-    and predicted_mask. Note that both masks must have the same shape for them to be evaluated.
-    Recall is defined as (true positive)/(true positive+false negative). In the case both masks
-    are empty (true positive = false negative = 0), the function returns 0 to prevent
-    divide by zero error.
-    :param true_mask: numpy array containing ground truth binary segmentation mask
-    :param predicted mask: numpy array containing predicted binary segmentation mask
-    """
-    assert true_mask.shape == predicted_mask.shape  # masks must be same shape for comparison
-
-    true_positive = np.logical_and(true_mask, predicted_mask).sum()  # true==1 and predict==1
-    false_negative = np.logical_and(true_mask, np.logical_not(predicted_mask)).sum()  # true==1 and predict==0
-
-    denom = true_positive + false_negative
-
-    if denom == 0:  # return 0 to prevent divide by 0 error
-        return 0.
-
-    return true_positive / denom
-
-
-def Fscore(true_mask, predicted_mask, Beta=1):
-    """
-    Computes the F-score for binary segmentation masks true_mask
-    and predicted_mask. Note that both masks must have the same shape for them to be evaluated.
-    F-score is defined as F(p,r,b) = (1+b^2)*(p*r)/(r+(b^2*p)), where p = precision, r = recall,
-    and b is a weighting parameter. b=1 weights precision and recall equally. b < 1 weights
-    recall lower than precision, and b>1 weights recall higher than precision.
-    In the case both precision and recall are 0, the function returns 0 to prevent
-    divide by zero error.
-
-    :param true_mask: numpy array containing ground truth binary segmentation mask
-    :param predicted mask: numpy array containing predicted binary segmentation mask
-    """
-
-    p = precision(true_mask, predicted_mask)
-    r = recall(true_mask, predicted_mask)
-
-    denom = (Beta ** 2 * p) + r
-
-    if denom == 0:
-        return 0.
-    else:
-        num = (1 + Beta ** 2) * p * r
-
-    return num / denom
-
-
 def mask_dict(masks, ids):
     """
     helper function for evaluate_masks()
@@ -435,6 +344,7 @@ def random_colors(N, seed, bright=True): # controls randomstate for plotting con
     hsv = [(i / N, 1, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     rs.shuffle(colors)
+    colors = np.asarray(colors)
     return colors
 
 

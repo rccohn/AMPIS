@@ -7,6 +7,77 @@ import skimage.io
 import mrcnn_utils
 import evaluate
 
+
+
+class instance_set(object):
+    """
+    Simple way to organize a set of instances for a single image to ensure
+    that formatting is consistent.
+    """
+    def __init__(self, masks=None, boxes=None, class_idx=None, class_idx_map=None, scores=None, 
+                 img=None, filepath=None, dataset_type=None, pred_or_gt=None):
+        
+        self.masks = masks # array of masks n_mask x r x c
+        self.boxes = boxes # array of boxes n_mask x 4 
+        self.class_idx = class_idx # array of int class indices  n_mask
+        self.class_idx_map = class_idx_map # maps int class to string label/descriptor dict
+        self.scores = scores # array of confidence scores n_mask 
+        self.img = img # image r x c x 3
+        self.filepath = filepath # file name or path of image
+        self.dataset_type = dataset_type # 'Training', 'Validation', 'Test', etc
+        self.pred_or_gt = pred_or_gt # 'gt' for ground truth, 'pred' for model prediction
+    
+
+    ##TODO __repr__?
+    
+    def read_from_ddict(self, ddict, return_=False):
+        """
+        Read ground-truth labels from ddict (see get_data_dicts)
+        
+        inputs:
+        :param ddict: list(dic) from get_data_dicts
+        :param return_: if True, function will return the instance_set object
+        """
+        
+        self.pred_or_gt = 'gt' # ddict assumed to be ground truth labels from via
+        self.filepath = pathlib.Path(ddict['file_name'])
+        self.dataset_type = ddict['dataset_class']
+        gt_ = extract_gt(ddict)
+        self.img = gt_['img']
+        self.masks = gt_['masks']
+        self.boxes = gt_['bboxes']
+        self.class_idx = gt_['class_idx']
+        self.class_idx_map = ddict['label_idx_mapper']
+        
+        if return_:
+            return self
+        
+        
+        
+    def read_from_numpy_out(self, filename, outs, return_=False):
+        """
+        Read predicted labels from output of detectron2 predictior
+        
+        inputs:
+        :param filename: filename of prediction (from dictionary) 
+        :param outs: predictions for a single image
+        :param return_: if True, function will return the instance_set object
+        """
+        self.filename = filename,
+        self.dataset_type = outs[1].split('_')[1] # Training or Validation
+        ann = outs[0]
+        self.masks = np.transpose(ann['masks'], (1,2,0)) # convert from n_mask x r x c to r x c x n_mask
+        self.boxes = ann['boxes'][:,(1,0,3,2)] # order bbox to have (x0,y0, x1, y1)
+        self.scores = ann['scores']
+        self.class_idx = ann['class']
+        
+        if return_:
+            return self
+    
+    
+        
+
+    
 def get_data_dicts(json_path):
     """
     Loads data in format consistent with detectron2.
@@ -36,20 +107,22 @@ def get_data_dicts(json_path):
 
         filename = os.path.join(img_root, v["filename"])
         
-        # inefficient for large sets of images, read from json?
-        height, width = skimage.io.imread(filename).shape[:2]
+        width, height = [int(x) for x in v['file_attributes']
+                         ['Size (width, height)'].split(', ')]
 
+        
         record["file_name"] = filename
         record["image_id"] = idx
         record["height"] = height
         record["width"] = width
         record["dataset_class"] = v['file_attributes']['Image Class']
-        
+
         annos = v["regions"]
         objs = []
         for anno in annos:
             # not sure why this was here, commenting it out didn't seem to break anything
             #assert not anno["region_attributes"] 
+            reg = anno['region_attributes']
             anno = anno["shape_attributes"]
             
             # polygon masks is list of polygon coordinates in format ([x0,y0,x1,y1...xn,yn]) as specified in
@@ -65,10 +138,18 @@ def get_data_dicts(json_path):
                 "bbox_mode": 'BoxMode.XYXY_ABS', # boxes are given in absolute coordinates (ie not corner+width+height)
                 "segmentation": [poly],
                 "category_id": 0,
+                "Labels": reg
             }
             objs.append(obj)
         record["annotations"] = objs
         dataset_dicts.append(record)
+    labels_all = set()
+    for record in dataset_dicts:
+        for ann in record['annotations']:
+            labels_all.add(ann['Labels']['Label'])
+    label_mapper = {idx: label for idx,label in enumerate(labels_all)}
+    for ddict in dataset_dicts:
+        ddict['label_idx_mapper'] = label_mapper
     return dataset_dicts
 
 
@@ -114,7 +195,7 @@ def extract_gt(ddict):
     gt: dictionary containing ground truth image and labels.
         gt contains the following keys and corresponding values:
           'img': r x c x 3 RGB image,
-          'masks': r x c x n_instance array of boolean instance masks
+          'masks': n_instance x r x c array of boolean instance masks
           'bboxes': n_instance x 4 array of coordinates for each bbox
           'class_idx': n_instance element array of integers corresponding to
                         the class label of each 
@@ -166,6 +247,26 @@ def project_masks(masks):
     return labels
 
 
+
+def IOU(true_mask, predicted_mask):
+    """
+    Computes Intersection Over Union score for binary segmentation masks true_mask
+    and predicted_mask. Note that both masks must have the same shape for them to be compared.
+    IOU is defined as (A and B).sum()/(A or B).sum().
+    If the union is 0 (both masks are empty), the IOU score is assumed to be 0
+    in order to prevent divide by 0 error.
+    Note that because intersection and union are symmetric, the function will
+    still work correctly if true_mask and predicted_mask are switched with each other.
+    :param true_mask: numpy array containing ground truth binary segmentation mask
+    :param predicted mask: numpy array containing predicted binary segmentation mask
+    """
+    assert true_mask.shape == predicted_mask.shape  # masks must be same shape for comparison
+    union = np.logical_or(true_mask, predicted_mask).sum()
+    if union == 0:  # both masks are empty
+        return 0.
+    intersection = np.logical_and(true_mask, predicted_mask).sum()
+    return intersection / union
+
 def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_thresh=0.5):
     """
     instance matching based on projected mask labels (see project_masks() function.)
@@ -173,8 +274,9 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     -1 and all other pixels have integer values corresponding to their index in the
     original r x c x n_masks arrays used to compute the label images.
     
-    Instances are matched on the basis of Intersection over Union (IOU,) or ratio of areas
-    of overlap between 2 masks to the total area occupied by both masks.
+    Note that gt_masks and pred_masks must contain only instances from a single class. For multi-class instance segmentation, the instances can be divided into subsets based on their class labels. TODO make helper function to split instance.
+    
+    Instances are matched on the basis of Intersection over Union (IOU,) or ratio of areas of overlap between 2 masks to the total area occupied by both masks.
     IOU (A,B) = sum(A & B)/sum(A | B)
     
     This should be much faster than brute-force matching, where IOU is computed for all
@@ -245,7 +347,7 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
                 r2 = max(g_r2, p_r2)
                 c2 = max(g_c2, p_c2)
 
-                IOU_[i] = evaluate.IOU(*[x[r1:r2,c1:c2] for x in [mask, pmask]])
+                IOU_[i] = IOU(*[x[r1:r2,c1:c2] for x in [mask, pmask]])
 
             IOU_amax = IOU_.argmax()
             IOU_max = IOU_[IOU_amax]
@@ -313,5 +415,52 @@ def filter_mask_size(masks, min_thresh=100, max_thresh=100000,
         return tuple(outs)
 
     
-    def mask_match_stats
+def mask_match_stats(gt, pred, IOU_thresh=0.5):
+    """
+        Computes match and mask statistics for a give pair of masks (of the same class.) Match statistics describe the number of instances that were correctly matched with IOU above the threshold. Mask statistics describe how well the matched masks agree with each other. For each set of tests, the precision and recall are reported. 
     
+    Inputs:
+    :param gt: r x c x n_mask boolean array of ground truth masks
+    :param pred: r x c x n_mask boolean array of predicted masks
+    :param IOU_thresh: IOU threshold for matching (see fast_instance_match())
+    
+    Returns:
+    output: dictionary with the following key:value pairs:
+      'match_precision': float between 0 and 1, match precision for instances 
+      'match_recall': float between 0 and 1, match recall for instances
+      'mask_precision': n_match element array containing match precision for
+                        each matched pair of instances
+      'mask_recall': n_match element array containing match recall for
+                     each matched pair of instances
+    """
+    ## match scoring
+    match_results_ = fast_instance_match(gt, pred, IOU_thresh=IOU_thresh)
+    matches_ = np.asarray(match_results_['gt_tp'])
+    TP_match_ = len(matches_) #  true positive
+    FN_match_ = len(match_results_['gt_fn']) #  false negative
+    FP_match_ = len(match_results_['pred_fp']) #  false positive
+
+    match_precision = TP_match_ / (TP_match_ + FP_match_)
+    match_recall = TP_match_ / (TP_match_ + FN_match_)
+
+    ## mask scoring
+    
+    # only include masks that were correctly matched
+
+    matched_masks_gt_ = gt[:,:,matches_[:,0]]
+    matched_masks_pred_ = pred[:,:,matches_[:,1]]
+    
+    TP_mask_ = np.logical_and(matched_masks_gt_,
+                             matched_masks_pred_,).sum((0,1))  # true positive
+    FN_mask_ =  np.logical_and(matched_masks_gt_,
+                              np.logical_not(matched_masks_pred_)).sum((0,1))  # false negative
+    FP_mask_ =  np.logical_and(np.logical_not(matched_masks_gt_),
+                               matched_masks_pred_).sum((0,1))  # false positive
+    
+    mask_precision = TP_mask_ / (TP_mask_ + FP_mask_)
+    mask_recall = TP_mask_ / (TP_mask_ + FN_mask_)
+    
+    return {'match_precision': match_precision,
+           'match_recall': match_recall,
+           'mask_precision': mask_precision,
+           'mask_recall': mask_recall}
