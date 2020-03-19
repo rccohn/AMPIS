@@ -3,7 +3,7 @@ import json
 import numpy as np
 import os
 import pathlib
-import skimage.io
+import skimage.io 
 
 import mrcnn_utils
 import evaluate
@@ -15,7 +15,7 @@ class instance_set(object):
     that formatting is consistent.
     """
     def __init__(self, masks=None, boxes=None, class_idx=None, class_idx_map=None, scores=None, 
-                 img=None, filepath=None, dataset_type=None, pred_or_gt=None):
+                 img=None, filepath=None, dataset_type=None, pred_or_gt=None, HFW=None,):
         
         self.masks = masks # array of masks n_mask x r x c
         self.boxes = boxes # array of boxes n_mask x 4 
@@ -26,8 +26,10 @@ class instance_set(object):
         self.filepath = filepath # file name or path of image
         self.dataset_type = dataset_type # 'Training', 'Validation', 'Test', etc
         self.pred_or_gt = pred_or_gt # 'gt' for ground truth, 'pred' for model prediction
+        self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units. ##TODO automatically read this
     
     ##TODO __repr__?
+    
     
     def read_from_ddict(self, ddict, return_=False):
         """
@@ -47,7 +49,7 @@ class instance_set(object):
         self.boxes = gt_['bboxes']
         self.class_idx = gt_['class_idx']
         self.class_idx_map = ddict['label_idx_mapper']
-        
+        self.HFW = ddict['HFW']
         if return_:
             return self
         
@@ -136,6 +138,7 @@ def get_data_dicts(json_path):
         record["height"] = height
         record["width"] = width
         record["dataset_class"] = v['file_attributes']['Image Class']
+        record['HFW'] = v['file_attributes']['HFW']
 
         annos = v["regions"]
         objs = []
@@ -321,7 +324,7 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
         'IOU_match': n_match element array of IOU scores for each match.
         }
     """
-    
+    ## TODO consider using np.unique[r1:r2,c1:c2,:].max((0,1)) with indexing array instead of projecting instances onto 2d image to handle case of overlapping instances
     n = gt_masks.shape[2] # number of ground truth instances
     
     # get label images for each set of masks 
