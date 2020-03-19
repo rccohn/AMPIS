@@ -1,3 +1,4 @@
+import copy
 import json
 import numpy as np
 import os
@@ -6,7 +7,6 @@ import skimage.io
 
 import mrcnn_utils
 import evaluate
-
 
 
 class instance_set(object):
@@ -27,7 +27,6 @@ class instance_set(object):
         self.dataset_type = dataset_type # 'Training', 'Validation', 'Test', etc
         self.pred_or_gt = pred_or_gt # 'gt' for ground truth, 'pred' for model prediction
     
-
     ##TODO __repr__?
     
     def read_from_ddict(self, ddict, return_=False):
@@ -52,8 +51,7 @@ class instance_set(object):
         if return_:
             return self
         
-        
-        
+       
     def read_from_numpy_out(self, filename, outs, return_=False):
         """
         Read predicted labels from output of detectron2 predictior
@@ -75,9 +73,32 @@ class instance_set(object):
             return self
     
     
+    def apply_mask(self, idx_mask):
+        """
+        Selects a subset of instances based on idx_mask, which can either be a boolean mask or an integer array of indices to select from.
         
-
+        inputs:
+        :param idx_mask: n_mask boolean array or n_mask_inlier integer index array array to select instances from.
+        """
+        
+        # masks are formatted differently than other attributes
+        # filter must be applied along axis 2
+        self.masks = self.masks[:,:,idx_mask]
+        
+        # other attributes filtered by applying mask along axis 0
+        for key in ['boxes', 'class_idx', 'scores',]:
+            att = self.__dict__[key]
+            if att is not None:
+                self.__dict__[key] = att[idx_mask]
+        
     
+    def copy(self):
+        """
+        returns a copy of the instance_set object
+        """
+        return copy.deepcopy(self)
+    
+
 def get_data_dicts(json_path):
     """
     Loads data in format consistent with detectron2.
@@ -110,7 +131,6 @@ def get_data_dicts(json_path):
         width, height = [int(x) for x in v['file_attributes']
                          ['Size (width, height)'].split(', ')]
 
-        
         record["file_name"] = filename
         record["image_id"] = idx
         record["height"] = height
@@ -131,7 +151,6 @@ def get_data_dicts(json_path):
             py = anno["all_points_y"]
             poly = [(x + 0.5, y + 0.5) for x, y in zip(px, py)]
             poly = [p for x in poly for p in x]
-            
             
             obj = {
                 "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
@@ -247,7 +266,6 @@ def project_masks(masks):
     return labels
 
 
-
 def IOU(true_mask, predicted_mask):
     """
     Computes Intersection Over Union score for binary segmentation masks true_mask
@@ -266,6 +284,7 @@ def IOU(true_mask, predicted_mask):
         return 0.
     intersection = np.logical_and(true_mask, predicted_mask).sum()
     return intersection / union
+
 
 def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_thresh=0.5):
     """
@@ -294,7 +313,13 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
                        have multiple matches.
 
     returns:
-      TODO finish this once format is specified
+      :param results: dictionary with the following structure:
+        {
+        'gt_tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance for match i. The second element corresponds to the index of the pred index for match i.
+        'gt_fn': n_fn element array where each element is a ground truth instance that was not matched (false negative)
+        'pred_fp': n_fp element array where each element is a predicted instance that was not matched (false positive)
+        'IOU_match': n_match element array of IOU scores for each match.
+        }
     """
     
     n = gt_masks.shape[2] # number of ground truth instances
@@ -318,7 +343,6 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     IOU_match = []
     
     pred_matched = np.zeros(pred_masks.shape[2], np.bool)  # values will be set to True when 
-                                                    #  predictions are matched
     
     for gt_idx, (mask, box) in enumerate(zip(np.transpose(gt_masks, (2,0,1)), 
                                                      gt_bbox)):
@@ -360,8 +384,8 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
                 gt_fn.append(gt_idx)
         
     pred_fp = np.asarray([x for x, matched in enumerate(pred_matched) if not matched])
-    results = {'gt_tp': gt_tp,
-              'gt_fn': gt_fn,
+    results = {'gt_tp': np.asarray(gt_tp, np.int),
+              'gt_fn': np.asarray(gt_fn, np.int),
               'pred_fp': pred_fp,
               'IOU_match': IOU_match}
     return results
@@ -381,7 +405,7 @@ def filter_mask_size(masks, min_thresh=100, max_thresh=100000,
     :param class_idx: n_mask element array of class labels (optional)
     :param scores: n_mask element array of scores (optional)
     :param colors: array of colors for visualization (optional)
-    :param return_mask: if True, returns n_mask element boolean mask indicating which instances are inliers
+    :param return_mask: if True, function only returns n_mask element boolean array indicating which instances are inliers
 
     
     returns:
@@ -398,15 +422,18 @@ def filter_mask_size(masks, min_thresh=100, max_thresh=100000,
     
     new_masks = masks[:,:,inlier_mask]
 
+    # if return_mask, we only want the boolean mask array, not the filtered components
+    if return_mask:
+        return inlier_mask
+    
     outs = [new_masks]
     
+
     # include optional arguments
     for optional_arg in [bbox, class_idx, scores, colors]:
         if optional_arg is not None:
             outs.append(optional_arg[inlier_mask])
-        
-    if return_mask:
-        outs.append(mapper)
+
 
     if len(outs) == 1:
         return outs[0]
@@ -464,3 +491,126 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5):
            'match_recall': match_recall,
            'mask_precision': mask_precision,
            'mask_recall': mask_recall}
+
+
+def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, match_results=None):
+    """
+    Computes matches between gt and pred masks. Returns the masks, boxes, and colors in a format that is convenient for visualizing the match performance number of correctly matched instances.
+    inputs:
+    :param gt_masks: r x c x n_mask_gt boolean array of ground truth masks
+    :param gt_bbox: n_mask_gt x 4 array of bbox coordinates for each ground truth mask
+    :param pred_masks: r x c x n_mask_pred boolean array of predicted masks
+    :param pred_bbox: n_mask_pred x 4 array of bbox coordinates for each predicted mask
+    :param colormap: dictionary with keys 'TP', 'FP', 'FN'. The value corresponding to each key is a 1x3 float array of RGB color values.
+    If colormap is None, default colors will be used.
+    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
+    If match_results is None, they will be computed using fast_instance_match().
+    
+    returns:
+    masks: r x c x n_mask_match boolean array containing true positive and false positive predicted masks, as well as false negative ground truth masks
+    bbox: n_mask_match x 4 array of bbox coordinates for each mask in masks
+    colors: n_mask_match x 3 array of RGB colors for each mask. Colors can be used to visually distinguish true positives, false positives, and false negatives. 
+    """
+    
+    #TODO pick prettier values!
+    if colormap is None:  # default values
+        colormap = {'TP': np.asarray([1,0,0],np.float),
+                    'FP': np.asarray([0,1,0],np.float),
+                    'FN': np.asarray([0,0,1], np.float)}
+    
+    if match_results is None:  # default
+        match_results = fast_instance_match(gt_masks, pred_masks)
+    
+    TP_idx = match_results['gt_tp'][:,1]
+    TP_masks = pred_masks[:,:,TP_idx]
+    TP_bbox = pred_bbox[TP_idx]
+    TP_colors = np.tile(colormap['TP'], (TP_masks.shape[2],1))
+    
+    FP_idx = match_results['pred_fp']
+    FP_masks = pred_masks[:,:,FP_idx]
+    FP_bbox = pred_bbox[FP_idx]
+    FP_colors = np.tile(colormap['FP'], (FP_masks.shape[2],1))
+    
+    FN_idx = match_results['gt_fn']
+    FN_masks = gt_masks[:,:,FN_idx]
+    FN_bbox = gt_bbox[FN_idx]
+    FN_colors = np.tile(colormap['FN'], (FN_masks.shape[2],1))
+    
+    masks = np.concatenate((TP_masks, FP_masks, FN_masks), axis=2)
+    bbox = np.concatenate((TP_bbox, FP_bbox, FN_bbox), axis=0)
+    colors = np.concatenate((TP_colors, FP_colors, FN_colors), axis=0)
+    
+    return masks, bbox, colors
+
+
+def mask_visualizer(gt_masks, pred_masks, match_results=None):
+    """
+    Computes matches between gt and pred masks. Returns a mask image where each pixel describes if the pixel in the masks is a true positive false positive, false negative, or a combinaton of these.
+    inputs:
+    :param gt_masks: r x c x n_mask_gt boolean array of ground truth masks
+    :param pred_masks: r x c x n_mask_pred boolean array of predicted masks
+    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
+    If match_results is None, they will be computed using fast_instance_match().
+    
+    returns:
+    mask_img: r x c x 3 RGB image that maps mask results to original image.
+    mapper: dictionary mapping colors in mask_img to descriptions 
+    """
+    # defaults
+    if match_results is None:
+        match_results = fast_instance_match(gt_masks, pred_masks)
+    
+    tp_idx = match_results['gt_tp']
+    matched_gt = gt_masks[:,:,tp_idx[:,0]]
+    matched_pred = pred_masks[:,:,tp_idx[:,1]]
+    
+    TP_mask_ = np.logical_and(matched_gt,
+                             matched_pred,)  # true positive
+    FN_mask_ =  np.logical_and(matched_gt,
+                              np.logical_not(matched_pred))  # false negative
+    FP_mask_ =  np.logical_and(np.logical_not(matched_gt),
+                               matched_pred)  # false positive
+    
+    
+    project = lambda masks: np.logical_or.reduce(masks, axis=2)
+    
+    TP_reduced = project(TP_mask_).astype(np.uint)
+    FN_reduced = project(FN_mask_).astype(np.uint) * 2
+    FP_reduced = project(FP_mask_).astype(np.uint) * 4
+    
+    # Code | TP   FN   FP 
+    #------+-------------
+    # 0    |  F    F   F
+    # 1    |  T    F   F
+    # 2    |  F    T   F    
+    # 3    |  T    T   F
+    # 4    |  F    F   T
+    # 5    |  T    F   T
+    # 6    |  F    T   T
+    # 7    |  T    T   T
+    pixel_map = TP_reduced + FN_reduced + FP_reduced
+    
+    masks = np.zeros((*pixel_map.shape[:2], 7), np.bool)
+    for i in range(1,8):
+        masks[:,:,i-1] = pixel_map == i
+    
+    # maps index to colors
+    color_mapper = np.array([
+       [0.   , 0.   , 0.   ],
+       [0.150, 0.   , 0.100],
+       [0.286, 1.   , 0.   ],
+       [1.   , 0.857, 0.   ],
+       [1.   , 0.   , 0.   ],
+       [0.   , 0.571, 1.   ],
+       [0.   , 1.   , 0.571],
+       [0.285, 0.   , 1.   ]])
+    
+    #mask_img_ravel = color_mapper[pixel_map.ravel(),:]
+    
+    #mask_img = np.reshape(mask_img_ravel, pixel_map.shape)
+    
+    colors = [color_mapper[1:], 
+              ['Other', 'TP','FN','TP+FN','FP','TP+FP','FN+FP','TP+FN+FP']]
+    
+    return masks, colors
+    
