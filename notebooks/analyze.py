@@ -58,16 +58,16 @@ class instance_set(object):
         return
         
        
-    def read_from_numpy_out(self, filename, outs, return_=False):
+    def read_from_numpy_out(self, filepath, outs, return_=False):
         """
         Read predicted labels from output of detectron2 predictior
         
         inputs:
-        :param filename: filename of prediction (from dictionary) 
+        :param filepath: filename of prediction (from dictionary) 
         :param outs: predictions for a single image
         :param return_: if True, function will return the instance_set object
         """
-        self.filename = filename,
+        self.filepath = filepath,
         self.dataset_type = outs[1].split('_')[1] # Training or Validation
         ann = outs[0]
         self.masks = np.transpose(ann['masks'], (1,2,0)) # convert from n_mask x r x c to r x c x n_mask
