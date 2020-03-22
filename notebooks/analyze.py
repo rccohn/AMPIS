@@ -2,8 +2,10 @@ import copy
 import json
 import numpy as np
 import os
+import pandas as pd
 import pathlib
 import skimage.io 
+import skimage.measure
 
 import mrcnn_utils
 import evaluate
@@ -27,6 +29,7 @@ class instance_set(object):
         self.dataset_type = dataset_type # 'Training', 'Validation', 'Test', etc
         self.pred_or_gt = pred_or_gt # 'gt' for ground truth, 'pred' for model prediction
         self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units. ##TODO automatically read this
+        self.rprops=None # region props, placeholder for self.compute_regionprops()
     
     ##TODO __repr__?
     
@@ -52,6 +55,7 @@ class instance_set(object):
         self.HFW = ddict['HFW']
         if return_:
             return self
+        return
         
        
     def read_from_numpy_out(self, filename, outs, return_=False):
@@ -92,6 +96,31 @@ class instance_set(object):
             att = self.__dict__[key]
             if att is not None:
                 self.__dict__[key] = att[idx_mask]
+    
+    def compute_rprops(self, keys=None, return_df=False):
+        """Applies skimage.measure.regionprops_table to masks for analysis.
+        :param keys: properties to be stored in dataframe. If None, default values will be used.
+        Default values: 'area', 'equivalent_diameter','major_axis_length', 'perimeter','solidity','orientation.'
+        For more info, see:
+        https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops_table.
+        :param return_df: bool, if True, function will return dataframe
+        
+        stored: 
+            self.rprops: pandas dataframe with desired properties, and an additional column for the class_idx.       
+        returns:
+           self.rprops will be returned as a dataframe if return_df is True
+        """
+        
+        if keys is None: # use default values
+            keys = ['area', 'equivalent_diameter','major_axis_length', 'perimeter','solidity','orientation']
+        rprops = [skimage.measure.regionprops_table(mask.astype(np.int),properties=keys)  
+                                                    for mask in np.transpose(self.masks, (2,0,1))]
+        df = pd.DataFrame(rprops)
+        df['class_idx'] = self.class_idx
+        self.rprops = df
+        
+        if return_df:
+            return self.rprops
         
     
     def copy(self):
@@ -335,14 +364,14 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     if gt_bbox is None:
         gt_bbox = mrcnn_utils.extract_bboxes(gt_masks)
     else: # TODO handle non-integer bboxes (with rounding and limits at edge of images)
-        gt_bbox = gt_bbox.astype(np.int) if gt_bbox.dtype is not np.int else bbox_gt
+        gt_bbox = gt_bbox.astype(np.int) if gt_bbox.dtype is not np.int else gt_bbox
     if pred_bbox is None:
         pred_bbox = mrcnn_utils.extract_bboxes(pred_masks)
     else:
-        pred_bbox = pred_bbox.astype(np.int) if pred_bbox.dtype is not np.int else bbox_gt
+        pred_bbox = pred_bbox.astype(np.int) if pred_bbox.dtype is not np.int else pred_bbox
     
     gt_tp = []  # true positive  [[gt_idx, pred_idx]]
-    gt_fn = []  # [gt_idx]
+    gt_fn = []  # false negatives [gt_idx]
     IOU_match = []
     
     pred_matched = np.zeros(pred_masks.shape[2], np.bool)  # values will be set to True when 
@@ -496,7 +525,7 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5):
            'mask_recall': mask_recall}
 
 
-def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, match_results=None):
+def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, match_results=None, TP_gt=False):
     """
     Computes matches between gt and pred masks. Returns the masks, boxes, and colors in a format that is convenient for visualizing the match performance number of correctly matched instances.
     inputs:
@@ -507,13 +536,17 @@ def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, ma
     :param colormap: dictionary with keys 'TP', 'FP', 'FN'. The value corresponding to each key is a 1x3 float array of RGB color values.
     If colormap is None, default colors will be used.
     :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
+    :param TP_gt: bool. If True, true positives will be displayed from ground truth instances. If False, true positives will be displayed from predicted instances.
     If match_results is None, they will be computed using fast_instance_match().
     
     returns:
     masks: r x c x n_mask_match boolean array containing true positive and false positive predicted masks, as well as false negative ground truth masks
     bbox: n_mask_match x 4 array of bbox coordinates for each mask in masks
     colors: n_mask_match x 3 array of RGB colors for each mask. Colors can be used to visually distinguish true positives, false positives, and false negatives. 
+    colormap: only returned if colormap=None. Returns the default colormap.
     """
+    
+    return_colormap = colormap == None
     
     #TODO pick prettier values!
     if colormap is None:  # default values
@@ -524,9 +557,15 @@ def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, ma
     if match_results is None:  # default
         match_results = fast_instance_match(gt_masks, pred_masks)
     
-    TP_idx = match_results['gt_tp'][:,1]
-    TP_masks = pred_masks[:,:,TP_idx]
-    TP_bbox = pred_bbox[TP_idx]
+    if TP_gt:
+        TP_idx = match_results['gt_tp'][:,0]
+        TP_masks = gt_masks[:,:,TP_idx]
+        TP_bbox = gt_bbox[TP_idx]
+    else:
+        TP_idx = match_results['gt_tp'][:,1]
+        TP_masks = pred_masks[:,:,TP_idx]
+        TP_bbox = pred_bbox[TP_idx]
+
     TP_colors = np.tile(colormap['TP'], (TP_masks.shape[2],1))
     
     FP_idx = match_results['pred_fp']
@@ -543,7 +582,11 @@ def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, ma
     bbox = np.concatenate((TP_bbox, FP_bbox, FN_bbox), axis=0)
     colors = np.concatenate((TP_colors, FP_colors, FN_colors), axis=0)
     
-    return masks, bbox, colors
+    outs = [masks, bbox, colors]
+    if return_colormap:
+        outs.append(colormap)
+    
+    return tuple(outs)
 
 
 def mask_visualizer(gt_masks, pred_masks, match_results=None):
