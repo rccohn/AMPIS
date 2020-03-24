@@ -19,6 +19,10 @@ import pickle
 import re
 import skimage
 import skimage.io
+import skimage.measure
+
+import mrcnn_utils
+import mrcnn_visualize
 
 ## detectron2
 from detectron2 import model_zoo
@@ -31,6 +35,7 @@ from detectron2.data import (
     build_detection_test_loader,
     build_detection_train_loader,
 )
+from detectron2.data.detection_utils import annotations_to_instances
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.modeling import build_model
 from detectron2.solver import build_lr_scheduler, build_optimizer
@@ -54,14 +59,15 @@ print(torch.cuda.is_available(), CUDA_HOME)
 
 # use subset of images without excessive amounts of instances for this experiment
 # filenames were randomly shuffled before saving
-with open('../data/raw/spheroidite/spheroidite-files.pickle', 'rb') as f:
+with open('spheroidite-files.pickle', 'rb') as f:
+#with open('../data/raw/spheroidite/spheroidite-files.pickle', 'rb') as f:
     filename_subset = sorted(pickle.load(f))
 
 
 EXPERIMENT_NAME = 'spheroidite'    
-
-data_root = pathlib.Path('..','data','raw','spheroidite')
-image_paths = {x.stem.replace('micrograph-','') : x for x in data_root.glob('micrograph*_resize*')}
+data_root = pathlib.Path('/media/ryan/TOSHIBA EXT/Research/datasets/uhcs-segment/images/spheroidite/')
+#data_root = pathlib.Path('..','data','raw','spheroidite')
+image_paths = {x.stem.replace('micrograph-','') : x for x in data_root.glob('micrograph*')}
 annotation_paths = {x.stem.replace('annotation-','') : x for x in data_root.glob('annotation*')}
 
 image_subset = [image_paths.get(x) for x in filename_subset if image_paths.get(x) is not None]
@@ -96,9 +102,15 @@ def get_ddicts(img_paths, label_paths, dclass):
 
         r, c = im.shape
 
+        resized_im_path = pathlib.Path(ipath.parent, 'resized_'+ipath.name)
+        if not resized_im_path.is_file():
+            im_resize = skimage.io.imread(ipath, as_gray=True)[:r,:c]
+            skimage.io.imsave(resized_im_path, im_resize)
+
+
 	
 
-        ddict = {'file_name': str(ipath),
+        ddict = {'file_name': str(resized_im_path),
                  'annotation_file': str(lpath),
                  'height': r,
                  'width': c,
@@ -110,7 +122,6 @@ def get_ddicts(img_paths, label_paths, dclass):
     
     return ddicts
 
-
 def mapper(ddict):
     """
     maps compressed ddict format to full format for training/inference
@@ -120,9 +131,12 @@ def mapper(ddict):
     ext_mapper = {'.tiff':255,
                  '.png':0}
 
-    im_b = skimage.io.imread(ddict['annotation_file']) == ext_mapper[ddict['annotation_file'].suffix]
-    
-    img = skimage.io.imread(ddict['file_name'], as_gray=True)[:ddict['height'], :ddict['width']]
+    im_path = pathlib.Path(ddict['file_name'])
+    ann_path = pathlib.Path(ddict['annotation_file'])
+    im_b = skimage.io.imread(ddict['annotation_file']) == ext_mapper[ann_path.suffix]
+
+
+    img = skimage.io.imread(im_path, as_gray=True)
     img = skimage.color.gray2rgb(img)
     
     labels = skimage.measure.label(im_b)
@@ -161,9 +175,8 @@ dataset_names = []
 for key, value in datasets_all.items():
     name = EXPERIMENT_NAME +'_'+key
     DatasetCatalog.register(name, lambda: get_ddicts(*value))
-    MetadataCatalog.get(EXPERIMENT_NAME + key).set(thing_classes=["Shperoidite"])
+    MetadataCatalog.get(name).set(thing_classes=["Spheroidite"])
     dataset_names.append(name)
-
 
 ##### Verify ground-truth masks are loaded correctly
 # overlays ground truth instances on images and saves them. 
@@ -173,7 +186,7 @@ for dataset in dataset_names:
         img_path = pathlib.Path(d['file_name'])
         img = cv2.imread(str(img_path))
         visualizer = Visualizer(img, metadata=MetadataCatalog.get(dataset), scale=1)
-        vis = visualizer.draw_dataset_dict(d)
+        vis = visualizer.draw_dataset_dict(mapper(d))
         fig, ax = plt.subplots(figsize=(10,5), dpi=300)
         ax.imshow(vis.get_image())
         ax.axis('off')
