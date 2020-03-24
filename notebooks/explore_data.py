@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pathlib
+import pickle
 import re
 import skimage.io
 
@@ -149,7 +150,7 @@ def split_data_dict(dataset_dicts, get_subset=None):
     
     return datasets
 
-json_path = '../data/raw/via_2.0.8/via_powder_particle_masks.json'
+json_path = '../data/raw/via_2.0.8/via_satellite_masks.json'
 ddicts = get_data_dicts(json_path)
 
 subs = split_data_dict(ddicts)
@@ -157,28 +158,31 @@ subs = split_data_dict(ddicts)
 
 # Store the data so that detectron2 can work with it
 for key, value in subs.items():
-    DatasetCatalog.register("powder_" + key, lambda key=key: subs.get(key))
-    MetadataCatalog.get("powder_" + key).set(thing_classes=["Powder"])
+    DatasetCatalog.register("satellite_" + key, lambda key=key: subs.get(key))
+    MetadataCatalog.get("satellite_" + key).set(thing_classes=["Satellite"])
 
 
 
 ##### Verify ground-truth masks are loaded correctly
 # overlays ground truth instances on images and saves them. 
-for dataset in ['powder_Training', 'powder_Validation']:
-    for d in DatasetCatalog.get(dataset):
-        img_path = pathlib.Path(d['file_name'])
-        img = cv2.imread(str(img_path))
-        visualizer = Visualizer(img, metadata=MetadataCatalog.get('powder_Training'), scale=1)
-        vis = visualizer.draw_dataset_dict(d)
-        fig, ax = plt.subplots(figsize=(10,5), dpi=300)
-        ax.imshow(vis.get_image())
-        ax.axis('off')
-        ax.set_title('{}\n{}'.format(dataset, img_path.name))
-        fig.tight_layout()
-        fig.savefig('../figures/masks/ground_truth/{}_{}.png'.format(dataset, img_path.stem))
-        if matplotlib.get_backend() is not 'agg': # if gui session is used, show images
-            plt.show()
-        plt.close('all')
+verify=False # if True, images with ground truth masks overlaid will be saved for reference
+if verify:
+    print('saving gt mask images')
+    for dataset in ['satellite_Training', 'satellite_Validation']:
+        for d in DatasetCatalog.get(dataset):
+            img_path = pathlib.Path(d['file_name'])
+            img = cv2.imread(str(img_path))
+            visualizer = Visualizer(img, metadata=MetadataCatalog.get('satellite_Training'), scale=1)
+            vis = visualizer.draw_dataset_dict(d)
+            fig, ax = plt.subplots(figsize=(10,5), dpi=300)
+            ax.imshow(vis.get_image())
+            ax.axis('off')
+            ax.set_title('{}\n{}'.format(dataset, img_path.name))
+            fig.tight_layout()
+            fig.savefig('../figures/masks/ground_truth/{}_{}.png'.format(dataset, img_path.stem))
+            if matplotlib.get_backend() is not 'agg': # if gui session is used, show images
+                plt.show()
+            plt.close('all')
 
 
 
@@ -187,8 +191,8 @@ for dataset in ['powder_Training', 'powder_Validation']:
 cfg = get_cfg()  # initialize configuration
 cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))  # use mask_rcnn with ResNet 50 backbone and feature pyramid network (FPN)
 
-cfg.DATASETS.TRAIN = ("powder_Training",)  # specifies name of training dataset (must be registered)
-cfg.DATASETS.TEST = ("powder_Validation",)  # specifies name of test dataset (must be registered)
+cfg.DATASETS.TRAIN = ("satellite_Training",)  # specifies name of training dataset (must be registered)
+cfg.DATASETS.TEST = ("satellite_Validation",)  # specifies name of test dataset (must be registered)
 cfg.DATALOADER.NUM_WORKERS = 2
 
 ## If the weights are locally available, use those. Otherwise, download them from model zoo.
@@ -215,6 +219,10 @@ cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (powder particle)
 # based on the limit established for the COCO dataset).
 cfg.TEST.DETECTIONS_PER_IMAGE = 300  ## UPPER LIMIT OF NUMBER INSTANCES THAT WILL BE RETURNED, ADJUST ACCORDINGLY
 
+# The period (in terms of steps) to evaluate the model during training.
+# Set to 0 to disable.
+cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD
+
 # Instead of training by epochs, detectron2 uses iterations. As far as I can tell, 1 iteration is a single instance.
 # Adjust this to determine how long the model trains.
 cfg.SOLVER.MAX_ITER = 20000   
@@ -234,6 +242,31 @@ else:
     print('skipping training, using results from previous training')
 
 
+
+### helper function for returning masks as numpy objects
+def instances_to_numpy(pred):
+    """
+    converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization 
+    can be done in environments without CUDA.
+    :param pred: detectron2.structures.instances.Instances object, from generating predictions on data
+    returns:
+    predictions_dict: Dictionary containing the following fields:
+    
+    """
+    
+    pred_dict = {}
+    
+    
+    for item, attribute in zip(['boxes','masks','class','scores'],
+                               ['pred_boxes','pred_masks','pred_classes','scores']):
+        if item is 'boxes':
+            pred_dict[item] = eval("pred.{}.tensor.to('cpu').numpy()".format(attribute))
+        else:
+            pred_dict[item] = eval("pred.{}.to('cpu').numpy()".format(attribute))
+    
+    return pred_dict
+    
+ 
 # get path of model weight at each checkpoint, 
 # sorted in order of the number of training steps, followed by the last model
 checkpoint_paths = sorted(list(pathlib.Path(cfg.OUTPUT_DIR).glob('*model_*.pth')))
@@ -257,9 +290,13 @@ writers = ([
 ])
 
 # set up evaluator for validation set
-data_val = dataval.build_detection_val_loader(cfg, None, ['powder_Validation'])
+data_val = dataval.build_detection_val_loader(cfg, None, ['satellite_Validation'])
 
-# repeat for every checkpoint saved during training
+last_only = False # if True, only view masks for final model.
+                 #    Else, view predictions for all models.
+if last_only:
+    checkpoint_paths = checkpoint_paths[-1:]
+
 for p in checkpoint_paths:
 
     cfg.MODEL.WEIGHTS = os.path.join(p)
@@ -271,52 +308,62 @@ for p in checkpoint_paths:
     checkpointer = DetectionCheckpointer(
     model, val_dir, optimizer=optimizer, scheduler=scheduler
     )
-    start_iter = (
-    checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=True).get("iteration", -1) + 1
-    )
+    #start_iter = (
+    #checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=True).get("iteration", -1) + 1
+    # )
+    # with EventStorage(start_iter) as storage:
+    #    for data in data_val: 
+    #          
+    #        storage.step()
+    #        loss_dict = model(data) # compute validation losses
+    #        losses = sum(loss_dict.values())
 
-    with EventStorage(start_iter) as storage:
-        for data in data_val: 
-              
-            storage.step()
-            loss_dict = model(data) # compute validation losses
-            losses = sum(loss_dict.values())
-
-            assert torch.isfinite(losses).all(), loss_dict
-
-            loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-            if comm.is_main_process():
-                storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
-            
-            for writer in writers: # write results to terminal, json, and tensorboard files
-                writer.write()
-
-
+    #        assert torch.isfinite(losses).all(), loss_dict
+    #        
+    #        loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
+    #        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+    #        if comm.is_main_process():
+    #            storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
+    #                    
+    #        for writer in writers: # write results to terminal, json, and tensorboard files
+    #            writer.write()
+    #
+    #
         ### visualization of predicted masks on all images
         # make directory for output mask predictions
-        outdir = '../figures/masks/predictions/{}'.format(p.stem)
-        os.makedirs(outdir, exist_ok=True)
-        predictor = DefaultPredictor(cfg)
-        for dataset in ['powder_Training', 'powder_Validation']:
-            for d in DatasetCatalog.get(dataset): # TODO  replace with datasetloader to make this less hacky
-                img_path = pathlib.Path(d['file_name'])
-                print('image filename: {}'.format(img_path.name))
-                img = cv2.imread(str(img_path))
-            
+    outdir = '../figures/masks/predictions/{}'.format(p.stem)
+    os.makedirs(outdir, exist_ok=True)
+    predictor = DefaultPredictor(cfg)
+    
+    outputs = {} # outputs as detectron2 instances objects
+    outputs_np = {}  # outputs as numpy arrays
+    for dataset in ['satellite_Training', 'satellite_Validation']:
+        for d in DatasetCatalog.get(dataset): # TODO  replace with datasetloader to make this less hacky
+            img_path = pathlib.Path(d['file_name'])
+            print('image filename: {}'.format(img_path.name))
+            img = cv2.imread(str(img_path))
+        
             # overlay predicted masks on image
             out = predictor(img)
+            outputs[img_path.name] = [out, dataset] # store prediction outputs in dictionary
+            outputs_np[img_path.name] = [instances_to_numpy(out['instances']), dataset]
             v = Visualizer(img, metadata=MetadataCatalog.get(dataset))
             draw = v.draw_instance_predictions(out['instances'].to('cpu'))
-            
+       
+            title = '{}\nnum_instances:{}\n{}'.format(dataset, len(out['instances'].to('cpu')), img_path.name) 
             # save images with standard formatting
             fig, ax = plt.subplots(figsize=(10,5), dpi=300)
             ax.imshow(draw.get_image())
             ax.set_title(title)
             fig.tight_layout()
             print(outdir, title, '.png')
-            
+        
             fig.savefig(pathlib.Path(outdir, title.replace('\n','_')))
             plt.close('all')
-
-
+        
+    pickle_path = pathlib.Path(outdir, 'outputs.pickle')
+    print('saving predictions to {}'.format(pickle_path))
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(outputs, f)   
+    with open(pathlib.Path(outdir, 'outputs_np.pickle'), 'wb') as f:
+        pickle.dump(outputs_np, f)

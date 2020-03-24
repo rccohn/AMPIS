@@ -22,7 +22,6 @@ import skimage.io
 import skimage.measure
 
 import mrcnn_utils
-import mrcnn_visualize
 
 ## detectron2
 from detectron2 import model_zoo
@@ -59,14 +58,14 @@ print(torch.cuda.is_available(), CUDA_HOME)
 
 # use subset of images without excessive amounts of instances for this experiment
 # filenames were randomly shuffled before saving
-with open('spheroidite-files.pickle', 'rb') as f:
-#with open('../data/raw/spheroidite/spheroidite-files.pickle', 'rb') as f:
+#with open('spheroidite-files.pickle', 'rb') as f:
+with open('../data/raw/spheroidite/spheroidite-files.pickle', 'rb') as f:
     filename_subset = sorted(pickle.load(f))
 
 
 EXPERIMENT_NAME = 'spheroidite'    
-data_root = pathlib.Path('/media/ryan/TOSHIBA EXT/Research/datasets/uhcs-segment/images/spheroidite/')
-#data_root = pathlib.Path('..','data','raw','spheroidite')
+#data_root = pathlib.Path('/media/ryan/TOSHIBA EXT/Research/datasets/uhcs-segment/images/spheroidite/')
+data_root = pathlib.Path('..','data','raw','spheroidite')
 image_paths = {x.stem.replace('micrograph-','') : x for x in data_root.glob('micrograph*')}
 annotation_paths = {x.stem.replace('annotation-','') : x for x in data_root.glob('annotation*')}
 
@@ -163,7 +162,7 @@ def mapper(ddict):
     # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
     # Therefore it's important to use torch.Tensor.
     dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(img.transpose(2, 0, 1)))
-    dataset_dict['instances'] = instances
+    dataset_dict['annotations'] = annotations
     
     
     return dataset_dict
@@ -231,7 +230,7 @@ cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (powder particle)
 
 # Maximum number of detections to return per image during inference (100 is
 # based on the limit established for the COCO dataset).
-cfg.TEST.DETECTIONS_PER_IMAGE = 300  ## UPPER LIMIT OF NUMBER INSTANCES THAT WILL BE RETURNED, ADJUST ACCORDINGLY
+cfg.TEST.DETECTIONS_PER_IMAGE = 600  ## UPPER LIMIT OF NUMBER INSTANCES THAT WILL BE RETURNED, ADJUST ACCORDINGLY
 
 # Instead of training by epochs, detectron2 uses iterations. As far as I can tell, 1 iteration is a single instance.
 # Adjust this to determine how long the model trains.
@@ -242,7 +241,7 @@ cfg.SOLVER.MAX_ITER = 20000
 
 os.makedirs(cfg.OUTPUT_DIR, exist_ok=True) # weights and tensorboard metrics will be stored here
 trainer = DefaultTrainer(cfg) 
-trainer.build_hooks()
+#trainer.build_hooks()
 trainer.resume_or_load(resume=False) 
 
 train = True # make True to retrain, False to skip training (ie when you only want to evaluate)
@@ -317,7 +316,7 @@ for p in checkpoint_paths:
     outdir = '../figures/masks/predictions/{}'.format(p.stem)
     os.makedirs(outdir, exist_ok=True)
     predictor = DefaultPredictor(cfg)
-    for dataset in ['powder_Training', 'powder_Validation']:
+    for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset): # TODO  replace with datasetloader to make this less hacky
             img_path = pathlib.Path(d['file_name'])
             print('image filename: {}'.format(img_path.name))
