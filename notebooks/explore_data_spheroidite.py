@@ -44,7 +44,7 @@ from detectron2.utils.events import (
 )
 from detectron2.utils.visualizer import Visualizer
 
-import dataval # custom module for getting loss stats # TODO figure out how to get more meaningful loss statistics
+#import dataval # custom module for getting loss stats # TODO figure out how to get more meaningful loss statistics
  
 # verify cuda is installed and running correctly
 import torch
@@ -61,7 +61,7 @@ with open('../data/raw/spheroidite/spheroidite-files.pickle', 'rb') as f:
 EXPERIMENT_NAME = 'spheroidite'    
 
 data_root = pathlib.Path('..','data','raw','spheroidite')
-image_paths = {x.stem.replace('micrograph-','') : x for x in data_root.glob('micrograph*')}
+image_paths = {x.stem.replace('micrograph-','') : x for x in data_root.glob('micrograph*_resize*')}
 annotation_paths = {x.stem.replace('annotation-','') : x for x in data_root.glob('annotation*')}
 
 image_subset = [image_paths.get(x) for x in filename_subset if image_paths.get(x) is not None]
@@ -94,11 +94,12 @@ def get_ddicts(img_paths, label_paths, dclass):
 
         im = skimage.io.imread(lpath)
 
-
         r, c = im.shape
 
-        ddict = {'file_name': pathlib.Path(ipath),
-                 'annotation_file': pathlib.Path(lpath),
+	
+
+        ddict = {'file_name': str(ipath),
+                 'annotation_file': str(lpath),
                  'height': r,
                  'width': c,
                  'dataset_class':d,
@@ -210,6 +211,7 @@ cfg.SOLVER.IMS_PER_BATCH = 1
 cfg.SOLVER.BASE_LR = 0.00025  # Learning rate (default is 0.00025)
 cfg.SOLVER.CHECKPOINT_PERIOD = 1000 
 cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512   # default: 512
+cfg.TEST.EVAL_PERIOD=cfg.SOLVER.CHECKPOINT_PERIOD
 
 #  Number of different classes of instances that will be predicted.
 cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (powder particle)
