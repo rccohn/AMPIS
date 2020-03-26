@@ -1,5 +1,5 @@
 ##### Module imports
-gui = True
+gui = False
 import matplotlib
 if not gui:
     # make sure script doesn't break on non-gui jobs 
@@ -21,6 +21,7 @@ import skimage.io
 import skimage.measure
 from skimage.transform import resize as im_resize
 
+import pycocotools.mask as RLE
 import data_utils
 
 ## detectron2
@@ -58,7 +59,7 @@ print(torch.cuda.is_available(), CUDA_HOME)
 # use subset of images without excessive amounts of instances for this experiment
 # filenames were randomly shuffled before saving
 #with open('spheroidite-files.pickle', 'rb') as f:
-debug_desktop = True # sets directories
+debug_desktop = False # sets directories
 if debug_desktop:
     #data_root = pathlib.Path('/media/ryan/TOSHIBA EXT/Research/datasets/uhcs-segment/images/spheroidite/')
     data_root = pathlib.Path('..','data','raw','spheroidite-images')
@@ -129,6 +130,7 @@ def get_ddicts(img_paths, label_paths, dclass):
         for i in range(1, unique.shape[0]+1):
             mask = labels == i
             bbox = data_utils.extract_boxes(mask)[0]
+            mask = RLE.encode(np.asfortranarray(mask))
 
             annotations.append({
                 'bbox': bbox,
