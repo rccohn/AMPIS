@@ -21,7 +21,7 @@ import skimage.io
 import skimage.measure
 from skimage.transform import resize as im_resize
 
-import mrcnn_utils
+import data_utils
 
 ## detectron2
 from detectron2 import model_zoo
@@ -105,7 +105,7 @@ def get_ddicts(img_paths, label_paths, dclass):
     """ 
     
     ddicts = []
-    for ipath, lpath, d in zip(img_paths,label_paths, itertools.repeat(dclass)):
+    for idx, (ipath, lpath, d) in enumerate(zip(img_paths,label_paths, itertools.repeat(dclass))):
 
         get_size = lambda path: [int(x) for x in path.stem.split('sizeRC_')[-1].split('_')]
         imsize = get_size(ipath)
@@ -116,65 +116,45 @@ def get_ddicts(img_paths, label_paths, dclass):
                  'height': imsize[0],
                  'width': imsize[1],
                  'dataset_class': d,
-                 'mask_format': "bitmask"}
+                 'mask_format': "bitmask",
+                 'image_id': idx}
+
+        ann = skimage.io.imread(str(lpath), as_gray=True)
+        labels = skimage.measure.label(ann == 255)
+
+        unique = np.unique(labels)
+        unique = unique[unique > 0]
+
+        annotations = []
+        for i in range(1, unique.shape[0]+1):
+            mask = labels == i
+            bbox = data_utils.extract_boxes(mask)[0]
+
+            annotations.append({
+                'bbox': bbox,
+                'bbox_mode': BoxMode.XYXY_ABS,
+                'segmentation': mask,
+                'category_id': 0,
+                })
+
+        ddict['annotations'] = annotations
+        ddict['num_instances'] = len(annotations)
         
         ddicts.append(ddict)
 
     return ddicts
 
 
-def mapper(ddict):
-    """
-    maps compressed ddict format to full format for training/inference
-    input: ddict from list(dict) returned from get_ddicts() 
-    returns: dataset_dict- data fully formatted for use with mask r-cnn
-    """
-
-    img = cv2.imread(ddict['file_name']) # for whatever reason cv2 format works better here
-    ann = skimage.io.imread(ddict['annotation_file'], as_gray=True)
-    labels = skimage.measure.label(ann == 255)
-
-    unique = np.unique(labels)
-    if unique[0] == 0:
-        unique = unique[1:] # ignore background pixels labeled as 0
-    
-    n = unique.shape[0]
-    
-    annotations=[]
-    for i in range(1,n+1):
-        mask = labels == i
-        bbox = mrcnn_utils.extract_bboxes(mask[:,:,np.newaxis])[0,[1,0,3,2]]
-        label = 0
-        annotations.append({'bbox': bbox,
-                            'bbox_mode': BoxMode.XYXY_ABS,
-                            'segmentation': mask,
-                            'category_id': label})
-    
-    #instances = annotations_to_instances(annotations, img.shape[:2], mask_format='bitmask')
-    
-    dataset_dict = {}
-    for k, v in ddict.items():
-        dataset_dict[k] = v
-    # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
-    # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
-    # Therefore it's important to use torch.Tensor.
-    dataset_dict["image"] = torch.as_tensor(img)
-    dataset_dict['annotations'] = annotations
-    
-    
-    return dataset_dict
-
-
 # Store the data so that detectron2 can work with it
 dataset_names = []
-
 # USER: update thing_classes
 for key in datasets_all.keys():
     name = EXPERIMENT_NAME +'_'+key
-    DatasetCatalog.register(name, lambda k=key: get_ddicts(*datasets_all[k]))
+    DatasetCatalog.register(name, lambda k=key: get_ddicts(*datasets_all[k]),)
     MetadataCatalog.get(name).set(thing_classes=[""]) # can set to 'Spheroidite' but labels can
                                                         # overwhelm images with many instances
     dataset_names.append(name)
+
 
 
 ##### Set up detectron2 configurations for Mask R-CNN model
@@ -216,6 +196,9 @@ cfg.TEST.DETECTIONS_PER_IMAGE = 600  ## UPPER LIMIT OF NUMBER INSTANCES THAT WIL
 cfg.SOLVER.MAX_ITER = 20000   
 
 
+
+
+
 ##### Verify ground-truth masks are loaded correctly
 # overlays ground truth instances on images and saves them.
 
@@ -234,21 +217,18 @@ os.mkdir(pred_figure_root)
 assert gt_figure_root.is_dir(), pred_figure_root.is_dir()
 for dataset in dataset_names:
     for d in DatasetCatalog.get(dataset):
+        print(d.keys())
+        print(d['annotations'][0].keys())
         img_path = pathlib.Path(d['file_name'])
         visualizer = Visualizer(cv2.imread(str(img_path)), metadata=MetadataCatalog.get(dataset), scale=1)
-        ddict_mapped = mapper(d)
-        vis = visualizer.draw_dataset_dict(ddict_mapped)
-        # img = ddict_mapped['image']
-        # instances = ddict_mapped['annotations']
-        # #print(dataset, d['file_name'])
-        # visualizer = Visualizer(img, metadata=MetadataCatalog.get(dataset), scale=1)
-        # vis = visualizer.overlay_instances(masks=instances.gt_masks, boxes=instances.gt_boxes)  # instances.gt_boxes, masks=None)#instances.gt_masks)
+        vis = visualizer.draw_dataset_dict(d)
         fig, ax = plt.subplots(figsize=(10,5), dpi=300)
         ax.imshow(vis.get_image())
         ax.axis('off')
         ax.set_title('{}\n{}'.format(dataset, img_path.name))
         fig.tight_layout()
-        fig_path = pathlib.Path(gt_figure_root, '{}_{}.png'.format(dataset, '{}'.format(img_path.stem)))
+        fig_path = pathlib.Path(gt_figure_root, '{}-n={}\n{}.png'.format(dataset,d['num_instances'],
+                                                                         '{}'.format(img_path.stem)))
         fig.savefig(fig_path, bbox_inches='tight')
         if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
             plt.show()
@@ -257,11 +237,10 @@ for dataset in dataset_names:
 
 ##### Train with model checkpointing
 
-trainer = DefaultTrainer(cfg)
-trainer.resume_or_load(resume=False)
-assert 1 == 2
 train = True # make True to retrain, False to skip training (ie when you only want to evaluate)
 if train:
+    trainer = DefaultTrainer(cfg)
+    trainer.resume_or_load(resume=False)
     print('training model')
     trainer.train() # uncomment to retrain model
 else:
