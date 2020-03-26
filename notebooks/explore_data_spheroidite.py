@@ -219,8 +219,6 @@ os.mkdir(pred_figure_root)
 assert gt_figure_root.is_dir(), pred_figure_root.is_dir()
 for dataset in dataset_names:
     for d in DatasetCatalog.get(dataset):
-        print(d.keys())
-        print(d['annotations'][0].keys())
         img_path = pathlib.Path(d['file_name'])
         visualizer = Visualizer(cv2.imread(str(img_path)), metadata=MetadataCatalog.get(dataset), scale=1)
         vis = visualizer.draw_dataset_dict(d)
