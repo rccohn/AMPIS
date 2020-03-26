@@ -58,12 +58,12 @@ print(torch.cuda.is_available(), CUDA_HOME)
 # use subset of images without excessive amounts of instances for this experiment
 # filenames were randomly shuffled before saving
 #with open('spheroidite-files.pickle', 'rb') as f:
-debug_desktop = False # sets directories
+debug_desktop = True # sets directories
 if debug_desktop:
     #data_root = pathlib.Path('/media/ryan/TOSHIBA EXT/Research/datasets/uhcs-segment/images/spheroidite/')
     data_root = pathlib.Path('..','data','raw','spheroidite-images')
 else:
-    data_root = pathlib.Path('..', 'data', 'raw', 'spheroidite')
+    data_root = pathlib.Path('..', 'data', 'raw', 'spheroidite-images')
 
 assert data_root.is_dir()
 with open(pathlib.Path(data_root, 'spheroidite-files.pickle'), 'rb') as f:
@@ -150,7 +150,7 @@ def mapper(ddict):
                             'segmentation': mask,
                             'category_id': label})
     
-    instances = annotations_to_instances(annotations, img.shape[:2], mask_format='bitmask')
+    #instances = annotations_to_instances(annotations, img.shape[:2], mask_format='bitmask')
     
     dataset_dict = {}
     for k, v in ddict.items():
@@ -159,7 +159,7 @@ def mapper(ddict):
     # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
     # Therefore it's important to use torch.Tensor.
     dataset_dict["image"] = torch.as_tensor(img)
-    dataset_dict['annotations'] = instances
+    dataset_dict['annotations'] = annotations
     
     
     return dataset_dict
@@ -172,7 +172,8 @@ dataset_names = []
 for key in datasets_all.keys():
     name = EXPERIMENT_NAME +'_'+key
     DatasetCatalog.register(name, lambda k=key: get_ddicts(*datasets_all[k]))
-    MetadataCatalog.get(name).set(thing_classes=["Spheroidite"])
+    MetadataCatalog.get(name).set(thing_classes=[""]) # can set to 'Spheroidite' but labels can
+                                                        # overwhelm images with many instances
     dataset_names.append(name)
 
 
@@ -180,6 +181,7 @@ for key in datasets_all.keys():
 cfg = get_cfg()  # initialize configuration
 cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))  # use mask_rcnn with ResNet 50 backbone and feature pyramid network (FPN)
 
+cfg.INPUT.MASK_FORMAT = 'bitmask' # 'polygon' or 'bitmask'
 cfg.DATASETS.TRAIN = ("spheroidite_Training",)  # specifies name of training dataset (must be registered)
 cfg.DATASETS.TEST = ("spheroidite_Validation",)  # specifies name of test dataset (must be registered)
 cfg.DATALOADER.NUM_WORKERS = 2
@@ -232,13 +234,15 @@ os.mkdir(pred_figure_root)
 assert gt_figure_root.is_dir(), pred_figure_root.is_dir()
 for dataset in dataset_names:
     for d in DatasetCatalog.get(dataset):
+        img_path = pathlib.Path(d['file_name'])
+        visualizer = Visualizer(cv2.imread(str(img_path)), metadata=MetadataCatalog.get(dataset), scale=1)
         ddict_mapped = mapper(d)
-        img_path = pathlib.Path(ddict_mapped['file_name'])
-        img = ddict_mapped['image']
-        instances = ddict_mapped['annotations']
-        #print(dataset, d['file_name'])
-        visualizer = Visualizer(img, metadata=MetadataCatalog.get(dataset), scale=1)
-        vis = visualizer.overlay_instances(masks=instances.gt_masks, boxes=instances.gt_boxes)  # instances.gt_boxes, masks=None)#instances.gt_masks)
+        vis = visualizer.draw_dataset_dict(ddict_mapped)
+        # img = ddict_mapped['image']
+        # instances = ddict_mapped['annotations']
+        # #print(dataset, d['file_name'])
+        # visualizer = Visualizer(img, metadata=MetadataCatalog.get(dataset), scale=1)
+        # vis = visualizer.overlay_instances(masks=instances.gt_masks, boxes=instances.gt_boxes)  # instances.gt_boxes, masks=None)#instances.gt_masks)
         fig, ax = plt.subplots(figsize=(10,5), dpi=300)
         ax.imshow(vis.get_image())
         ax.axis('off')
@@ -255,7 +259,7 @@ for dataset in dataset_names:
 
 trainer = DefaultTrainer(cfg)
 trainer.resume_or_load(resume=False)
-
+assert 1 == 2
 train = True # make True to retrain, False to skip training (ie when you only want to evaluate)
 if train:
     print('training model')
