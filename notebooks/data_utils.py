@@ -51,3 +51,29 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
         boxes[i] = np.array([y1, x1, y2, x2], dtype=dtype)[order]
 
     return boxes
+
+
+def instances_to_numpy(pred):
+    """
+    converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization
+    can be done in environments without CUDA.
+    :param pred: detectron2.structures.instances.Instances object, from generating predictions on data
+    returns:
+    pred_dict: Dictionary containing the following fields:
+    'boxes': n_mask x 4 array of boxes
+    'masks': n_mask x R x C array of masks
+    'class': n_mask element array of class ids
+    'scores': n_mask element array of confidence scores (from softmax)
+    """
+
+    pred_dict = {}
+
+    for item, attribute in zip(['boxes', 'masks', 'class', 'scores'],
+                               ['pred_boxes', 'pred_masks', 'pred_classes', 'scores']):
+        if item is 'boxes':
+
+            pred_dict[item] = pred.__getattribute__(attribute).tensor.to('cpu').numpy()
+        else:
+            pred_dict[item] = pred.__getattribute__(attribute).to('cpu').numpy()
+
+    return pred_dict

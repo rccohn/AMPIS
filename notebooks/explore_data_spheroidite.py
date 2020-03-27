@@ -204,9 +204,6 @@ cfg.SOLVER.MAX_ITER = 20000
 ##### Verify ground-truth masks are loaded correctly
 # overlays ground truth instances on images and saves them.
 
-if pathlib.Path(cfg.OUTPUT_DIR).is_dir():
-    import shutil
-    shutil.rmtree(cfg.OUTPUT_DIR)
 os.makedirs(cfg.OUTPUT_DIR, exist_ok=True) # weights and tensorboard metrics will be stored here
 
 outdir = pathlib.Path(str(cfg.OUTPUT_DIR))
@@ -214,13 +211,11 @@ figure_root = pathlib.Path(outdir, 'Figures', 'masks')
 gt_figure_root = pathlib.Path(figure_root, 'ground_truth')
 pred_figure_root = pathlib.Path(figure_root, 'predicted')
 
-os.makedirs(gt_figure_root)
-os.mkdir(pred_figure_root)
+os.makedirs(gt_figure_root, exist_ok=True)
+os.makekdirs(pred_figure_root, exist_ok=True)
 assert gt_figure_root.is_dir(), pred_figure_root.is_dir()
 for dataset in dataset_names:
     for d in DatasetCatalog.get(dataset):
-        print(d.keys())
-        print(d['annotations'][0].keys())
         img_path = pathlib.Path(d['file_name'])
         visualizer = Visualizer(cv2.imread(str(img_path)), metadata=MetadataCatalog.get(dataset), scale=1)
         vis = visualizer.draw_dataset_dict(d)
@@ -239,7 +234,7 @@ for dataset in dataset_names:
 
 ##### Train with model checkpointing
 
-train = True # make True to retrain, False to skip training (ie when you only want to evaluate)
+train = False  # make True to retrain, False to skip training (ie when you only want to evaluate)
 if train:
     trainer = DefaultTrainer(cfg)
     trainer.resume_or_load(resume=False)
@@ -255,15 +250,9 @@ checkpoint_paths = sorted(list(pathlib.Path(cfg.OUTPUT_DIR).glob('*model_*.pth')
 
 print('checkpoint paths found:\n\t{}'.format('\n\t'.join([x.name for x in checkpoint_paths])))
 
-os.makedirs(pathlib.Path(val_dir,"Figures","masks","ground_truth"))
-# set up writers
-writers = ([
- CommonMetricPrinter(cfg.SOLVER.MAX_ITER), # prints to terminal
-            JSONWriter(os.path.join(val_dir, "metrics_validation.json")), # each line in this file is a separate JSON containing losses
-            TensorboardXWriter(val_dir), # creates tensorboard log file with all constants
-])
-
-# repeat for every checkpoint saved during training
+last_only=True
+if last only:
+    checkpoint_paths = checkpoint_paths[-1:]
 
 for p in checkpoint_paths:
 
@@ -271,28 +260,43 @@ for p in checkpoint_paths:
 
         ### visualization of predicted masks on all images
         # make directory for output mask predictions
-    outdir = '../figures/masks/predictions/{}'.format(p.stem)
+    outdir = pathlib.Path(pred_figure_root,p.stem)
     os.makedirs(outdir, exist_ok=True)
     predictor = DefaultPredictor(cfg)
+    outputs = {}
+    outputs_np = {}
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset): # TODO  replace with datasetloader to make this less hacky
             img_path = pathlib.Path(d['file_name'])
             print('image filename: {}'.format(img_path.name))
             img = cv2.imread(str(img_path))
 
-        # overlay predicted masks on image
-        out = predictor(img)
-        v = Visualizer(img, metadata=MetadataCatalog.get(dataset))
-        draw = v.draw_instance_predictions(out['instances'].to('cpu'))
+            # overlay predicted masks on image
+            out = predictor(img)
+            outputs[img_path.name] = {'outputs': out,'file_name': img_path.name, 'dataset': dataset} # store prediction outputs in dictionary
+            outputs_np[img_path.name] = {'outputs': data_utils.instances_to_numpy(out['instances']),
+                                         'file_name': img_path.name, 'dataset': dataset} # store outputs as numpy
+                                        # for analysis on machines without detectron2/gpu
 
-        # save images with standard formatting
-        fig, ax = plt.subplots(figsize=(10,5), dpi=300)
-        ax.imshow(draw.get_image())
-        ax.set_title(title)
-        fig.tight_layout()
-        print(outdir, title, '.png')
+            v = Visualizer(img, metadata=MetadataCatalog.get(dataset))
+            draw = v.draw_instance_predictions(out['instances'].to('cpu'))
 
-        fig.savefig(pathlib.Path(outdir, title.replace('\n','_')))
-        plt.close('all')
+            # save images with standard formatting
+            fig, ax = plt.subplots(figsize=(10,5), dpi=300)
+            ax.imshow(draw.get_image())
+            ax.set_title(title)
+            ax.axis('off')
+            fig.tight_layout()
+            print(outdir, title, '.png')
+
+            fig.savefig(pathlib.Path(outdir, title.replace('\n','_')), bbox_inches='tight')
+            plt.close('all')
+
+    pickle_path = pathlib.Path(outdir, 'outputs.pickle')
+    print('saving predictions to {}'.format(pickle_path))
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(outputs, f)
+    with open(pathlib.Path(outdir, 'outputs_np.pickle'), 'wb') as f:
+        pickle.dump(outputs_np, f)
 
 
