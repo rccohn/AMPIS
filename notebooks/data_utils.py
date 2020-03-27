@@ -66,14 +66,12 @@ def instances_to_numpy(pred):
     'scores': n_mask element array of confidence scores (from softmax)
     """
 
-    pred_dict = {}
+    pred_dict = {'boxes': pred.pred_boxes.tensor.to('cpu').numpy(),
+                 'masks': pred.pred_masks.to('cpu').numpy(),
+                 'class_idx': pred.pred_classes.to('cpu').numpy(),
+                 'scores': pred.scores.to('cpu').numpy(),
+                }
 
-    for item, attribute in zip(['boxes', 'masks', 'class', 'scores'],
-                               ['pred_boxes', 'pred_masks', 'pred_classes', 'scores']):
-        if item is 'boxes':
-
-            pred_dict[item] = pred.__getattribute__(attribute).tensor.to('cpu').numpy()
-        else:
-            pred_dict[item] = pred.__getattribute__(attribute).to('cpu').numpy()
+    
 
     return pred_dict

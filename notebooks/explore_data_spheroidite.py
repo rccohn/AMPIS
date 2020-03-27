@@ -212,7 +212,7 @@ gt_figure_root = pathlib.Path(figure_root, 'ground_truth')
 pred_figure_root = pathlib.Path(figure_root, 'predicted')
 
 os.makedirs(gt_figure_root, exist_ok=True)
-os.makekdirs(pred_figure_root, exist_ok=True)
+os.makedirs(pred_figure_root, exist_ok=True)
 assert gt_figure_root.is_dir(), pred_figure_root.is_dir()
 for dataset in dataset_names:
     for d in DatasetCatalog.get(dataset):
@@ -251,7 +251,7 @@ checkpoint_paths = sorted(list(pathlib.Path(cfg.OUTPUT_DIR).glob('*model_*.pth')
 print('checkpoint paths found:\n\t{}'.format('\n\t'.join([x.name for x in checkpoint_paths])))
 
 last_only=True
-if last only:
+if last_only:
     checkpoint_paths = checkpoint_paths[-1:]
 
 for p in checkpoint_paths:
@@ -284,6 +284,7 @@ for p in checkpoint_paths:
             # save images with standard formatting
             fig, ax = plt.subplots(figsize=(10,5), dpi=300)
             ax.imshow(draw.get_image())
+            title = '{}\nnum_instances:{}\n{}'.format(dataset, len(out['instances'].to('cpu')), img_path.name)
             ax.set_title(title)
             ax.axis('off')
             fig.tight_layout()
