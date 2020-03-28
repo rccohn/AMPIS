@@ -99,6 +99,7 @@ def get_data_dicts(json_path):
             }
             objs.append(obj)
         record["annotations"] = objs
+        record['num_instances'] = len(objs)
         dataset_dicts.append(record)
     return dataset_dicts
 
@@ -140,9 +141,14 @@ def split_data_dict(dataset_dicts, get_subset=None):
 
 if __name__ == '__main__':
     print(torch.cuda.is_available(), CUDA_HOME)
+    EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
 
-    json_path = '../data/raw/via_2.0.8/via_satellite_masks.json'
-    EXPERIMENT_NAME = 'satellites'
+    json_dict = {'particles':'../data/raw/via_2.0.8/via_powder_particle_masks.json',
+                 'satellites':'../data/raw/via_2.0.8/via_satellite_masks.json'}
+
+
+    json_path = json_dict[EXPERIMENT_NAME]
+
 
     ddicts = get_data_dicts(json_path)
     subs = split_data_dict(ddicts)
@@ -155,7 +161,7 @@ if __name__ == '__main__':
     for key, value in subs.items():
         name = EXPERIMENT_NAME + '_' + key
         DatasetCatalog.register(name, lambda key=key: subs.get(key))
-        MetadataCatalog.get(name).set(thing_classes=["Satellite"])
+        MetadataCatalog.get(name).set(thing_classes=[""])  # labels removed because they crowd images.
         dataset_names.append(name)
 
     ##### Set up detectron2 configurations for Mask R-CNN model
@@ -236,7 +242,7 @@ if __name__ == '__main__':
         predictor = DefaultPredictor(cfg)
         outputs = {}  # outputs as detectron2 instances objects
         outputs_np = {}  # outputs as numpy arrays
-        for dataset in ['satellite_Training', 'satellite_Validation']:
+        for dataset in dataset_names:
             for d in DatasetCatalog.get(dataset):  # TODO  replace with datasetloader to make this less hacky
                 img_path = pathlib.Path(d['file_name'])
                 print('image filename: {}'.format(img_path.name))
