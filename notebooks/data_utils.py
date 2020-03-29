@@ -12,7 +12,7 @@ import torch
 from detectron2.data import MetadataCatalog, DatasetMapper, build_detection_test_loader
 from detectron2.engine.hooks import HookBase
 from detectron2.engine.defaults import DefaultTrainer
-from detectron2.evaluation import COCOEvaluator
+#from detectron2.evaluation import DatasetEvaluator
 import detectron2.utils.comm as comm
 from detectron2.utils.logger import log_every_n_seconds
 from detectron2.utils.visualizer import Visualizer
@@ -89,17 +89,10 @@ class AmpisTrainer(DefaultTrainer):
         super().__init__(cfg)
         self.val_dataset = val_dataset
 
-    @classmethod
-    def build_evaluator(cls, cfg, val_dataset=None):
-        if val_dataset is None:
-            val_dataset = cfg.DATASETS.TEST[0]
-        output_folder = os.path.join(cfg.OUTPUT_DIR, "validation")
-        return COCOEvaluator(val_dataset, cfg, True, output_folder)
-
     def build_hooks(self):
         hooks = super().build_hooks()
         hooks.insert(-1, LossEvalHook(
-            self.cfg.TEST.EVAL_PERIOD,
+            self.cfg.SOLVER.CHECKPOINT_PERIOD,
             self.model,
             build_detection_test_loader(
                 self.cfg,

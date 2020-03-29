@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
     cfg.SOLVER.CHECKPOINT_PERIOD = 1000  # save checkpoint (model weights) after this many iterations
-    cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # validation loss will be computed at every checkpoint
+    #cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # model evaluation (different from loss)
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
 
@@ -216,7 +216,6 @@ if __name__ == '__main__':
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
     if train:
         trainer = data_utils.AmpisTrainer(cfg)
-        trainer.build_evaluator(cfg)
         trainer.resume_or_load(resume=False)
         print('training model')
         trainer.train()  # uncomment to retrain model
