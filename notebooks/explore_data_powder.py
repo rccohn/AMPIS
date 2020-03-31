@@ -76,6 +76,7 @@ def get_data_dicts(json_path):
         record["height"] = height
         record["width"] = width
         record["dataset_class"] = v['file_attributes']['Image Class']
+        record["mask_format"] = 'polygon'
         
         annos = v["regions"]
         objs = []
@@ -139,6 +140,31 @@ def split_data_dict(dataset_dicts, get_subset=None):
     return datasets
 
 
+def get_metadata(json_path):
+    """
+    Reads metadata from via file.
+    For powder segmentation, only class labels are needed.
+    Args:
+        json_path: string or path to via json file
+
+    Returns:
+        metadata: dictionary of values to be registered to MetadataCatalog
+    """
+    with open(json_path, 'rb') as f:
+        data = json.load(f)
+
+    labels = set()
+    for file_metadata in data['_via_img_metadata'].values():
+        for region in file_metadata['regions']:
+            labels.add(region['region_attributes']['Label'])
+
+    labels = sorted(labels, key=lambda x: x.upper())
+
+    metadata = {'thing_classes': labels}
+
+    return metadata
+
+
 if __name__ == '__main__':
     print(torch.cuda.is_available(), CUDA_HOME)
     EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
@@ -161,7 +187,7 @@ if __name__ == '__main__':
     for key, value in subs.items():
         name = EXPERIMENT_NAME + '_' + key
         DatasetCatalog.register(name, lambda key=key: subs.get(key))
-        MetadataCatalog.get(name).set(thing_classes=[""])  # labels removed because they crowd images.
+        MetadataCatalog.get(name).set(**get_metadata(json_path))  # labels removed because they crowd images.
         dataset_names.append(name)
 
     ##### Set up detectron2 configurations for Mask R-CNN model
@@ -209,8 +235,8 @@ if __name__ == '__main__':
     # Visualize gt masks and save resulting figures
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset):
-            print('visualizing gt instances for {}'.format(d['file_name']))
-            data_utils.quick_visualize_instances(d, gt_figure_root, dataset)
+            print('visualizing gt instances for {}'.format(pathlib.Path(d['file_name']).relative_to('./')))
+            data_utils.quick_visualize_instances(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)

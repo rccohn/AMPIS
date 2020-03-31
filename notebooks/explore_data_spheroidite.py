@@ -1,5 +1,5 @@
 ##### Module imports
-gui = False
+gui = True
 import matplotlib
 if not gui:
     # make sure script doesn't break on non-gui jobs 
@@ -91,7 +91,7 @@ def get_files(pickle_file, n_test):
     valid_set = subset_dict(img_valid, ann_valid, 'Validation')
 
     file_subsets = {'Training': train_set,
-                    'Validation': valid_set}
+                    'Validation': valid_set,}
 
     return file_subsets
 
@@ -109,6 +109,7 @@ def get_ddicts(file_subset):
     img_paths = file_subset['image_paths']
     label_paths = file_subset['annotation_paths']
     dclass = file_subset['dclass']
+    metadata = get_metadata()
 
     ddicts = []
     for idx, (ipath, lpath, d) in enumerate(zip(img_paths,label_paths, itertools.repeat(dclass))):
@@ -151,6 +152,19 @@ def get_ddicts(file_subset):
 
     return ddicts
 
+
+def get_metadata():
+    """
+    Returns metadata for the dataset.
+    For the spheroidite dataset, metadata is hard-coded
+    as it is not stored in any file.
+    Returns:
+        Metadata- dictionary containing metadata to register to MetadataCatalog
+    """
+    Metadata = {'thing_classes': ['spheroidite']}
+    return Metadata
+
+
 if __name__ == '__main__':
     print(torch.cuda.is_available(), CUDA_HOME)
 
@@ -168,8 +182,8 @@ if __name__ == '__main__':
     # USER: update thing_classes
     for key in datasets_all.keys():
         name = EXPERIMENT_NAME + '_' + key
-        DatasetCatalog.register(name, lambda k=key: get_ddicts(datasets_all[k]), )
-        MetadataCatalog.get(name).set(thing_classes=[""])  # can set to 'Spheroidite' but labels can
+        DatasetCatalog.register(name, lambda k=key: get_ddicts(datasets_all[k]))
+        MetadataCatalog.get(name).set(**get_metadata())
         # overwhelm images with many instances
         dataset_names.append(name)
 
@@ -197,7 +211,7 @@ if __name__ == '__main__':
     # Needed when computer does not have network access/permission to download files.
     weights_path = pathlib.Path('../', 'models', 'model_final_f10217.pkl')  # path where downloaded weights is stored
     if weights_path.is_file():
-        print('Weights found')
+        print('Weights found: {}'.format(weights_path.relative_to('./')))
         cfg.MODEL.WEIGHTS = '../models/model_final_f10217.pkl'
     else:
         weights_source = model_zoo.get_checkpoint_url(
@@ -219,7 +233,7 @@ if __name__ == '__main__':
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset):
             print('visualizing gt instances for {}'.format(d['file_name']))
-            data_utils.quick_visualize_instances(d, gt_figure_root, dataset)
+            data_utils.quick_visualize_instances(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)

@@ -4,23 +4,25 @@ import logging
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import pathlib
+import pycocotools.mask as RLE
 import time
 import torch
 
 from detectron2.data import MetadataCatalog, DatasetMapper, build_detection_test_loader
 from detectron2.engine.hooks import HookBase
 from detectron2.engine.defaults import DefaultTrainer
-#from detectron2.evaluation import DatasetEvaluator
+from detectron2.structures import BoxMode
 import detectron2.utils.comm as comm
 from detectron2.utils.logger import log_every_n_seconds
 from detectron2.utils.visualizer import Visualizer
 
 
+
 ### HOOKS AND TRAINER NEEDED TO GET VALIDATION LOSS
 # adapted from
-# https://medium.com/@apofeniaco/training-on-detectron2-with-a-validation-set-and-plot-loss-on-it-to-avoid-overfitting-6449418fbf4e
+# https://medium.com/@apofeniaco/
+# training-on-detectron2-with-a-validation-set-and-plot-loss-on-it-to-avoid-overfitting-6449418fbf4e
 # and https://gist.github.com/ortegatron/c0dad15e49c2b74de8bb09a5615d9f6b
 class LossEvalHook(HookBase):
     def __init__(self, eval_period, model, data_loader):
@@ -110,7 +112,7 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
         masks: boolean array of masks. Can be 2 dimensions for 1 mask or 3 dimensions for array of masks.
         mask shape specified by mask_mode.
         mask_mode: if 'detectron2,' masks are shape n_mask x r x c. if 'matterport,' masks are r x c x n_masks.
-        box_mode: if 'detectron2', boxes will be returned in [x1,y1,x2,y2] floating point format.
+        box_mode: if 'detectron2', boxes will be returned in [x1,y1,x2,y2] floating point format. (XYXY_ABS box mode)
         if 'matterport,' boxes will be returned in [y1,y2,x1,x2] integer format.
 
     Returns:
@@ -127,13 +129,8 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
     # by now, masks should be in n_mask x r x c format
 
     # matterport visualizer requires fixed
-    if box_mode == 'detectron2':
-        dtype = np.float
-        order = [1,0,3,2] # box [x1, y1, x2, y2]
-    else:
-        dtype= np.int32
-        order = [0, 1, 2, 3] # box [y1, y2, x1, x2]
 
+    dtype = np.float if box_mode == 'detectron2' else np.int
     boxes = np.zeros((masks.shape[0], 4), dtype=dtype)
     for i, m in enumerate(masks):
 
@@ -142,20 +139,53 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
         if horizontal_indicies.shape[0]:
             x1, x2 = horizontal_indicies[[0, -1]]
             y1, y2 = vertical_indicies[[0, -1]]
-            # x2 and y2 should not be part of the box. Increment by 1.
-            x2 += 1
-            y2 += 1
         else:
             # No mask for this instance. Might happen due to
             # resizing or cropping. Set bbox to zeros
             x1, x2, y1, y2 = 0, 0, 0, 0
 
-        boxes[i] = np.array([y1, x1, y2, x2], dtype=dtype)[order]
+        if box_mode == 'detectron2':
+            # boxes as absolute coordinates
+            box = np.array([x1, y1, x2, y2], dtype=dtype)
+        else:
+            # boxes as array indices
+            # offset x2 and y2 by 1 so they are included in indexing mask[y1:y2,x1:x2]
+            # since indices are on the interval [i1, i2)
+            box = np.array([y1, y2+1, x1, x2+1], dtype=dtype)
+
+        boxes[i] = box
 
     return boxes
 
 
-def instances_to_numpy(pred):
+def compress_pred(pred):
+    """
+    Compresses predicted masks to RLE and stores output of predictions
+    Args:
+        pred: outputs of detectron2 predictor
+ 
+    Returns:
+        pred_compressed: pred with masks compressed to RLE format
+    """
+    pred.pred_masks = [RLE.encode(np.asfortranarray(x.to('cpu').numpy())) for x in pred.pred_masks]
+    return pred
+
+
+
+def combine_gt_pred(gt, pred):
+    """
+    Groups gt instances with corresponding predictions from inference. Predicted masks
+    are compressed to RLE format for memory-efficient storage.
+    Args:
+        gt: ground truth data dict
+        pred: predicted outputs from model
+    Returns:
+
+
+    """
+    pass
+
+def instances_to_numpy(gt, pred):
     """
     converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization
     can be done in environments without CUDA.
@@ -163,7 +193,9 @@ def instances_to_numpy(pred):
     returns:
     pred_dict: Dictionary containing the following fields:
     'boxes': n_mask x 4 array of boxes
-    'masks': n_mask x R x C array of masks
+    'box_mode': string correspnding to detectron2 box mode
+    'masks': n_mask element list of RLE encoded masks
+    'mask_format': 'bitmask'
     'class': n_mask element array of class ids
     'scores': n_mask element array of confidence scores (from softmax)
     """
@@ -175,7 +207,7 @@ def instances_to_numpy(pred):
                 }
     return pred_dict
 
-def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None):
+def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
     """
     Args: Visualize gt instances and save masks overlaid on images in target directory
         ddict:for ground truth- data dict containing masks, see output of get_ddicts()
@@ -186,14 +218,19 @@ def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None):
             if False, visualizer.draw_instance_predictions is used for PREDICTED instances
         img_path: if None, img_path is read from ddict (ground truth)
         otherwise, it is a string or path to the image file
+        suppress_labels: if True, class names will not be shown on visualizer
 
     """
     if img_path is None:
         img_path = pathlib.Path(ddict['file_name'])
     img_path = pathlib.Path(img_path)
-    visualizer = Visualizer(cv2.imread(str(img_path)), metadata=MetadataCatalog.get(dataset), scale=1)
+    if suppress_labels:
+        metadata = {'thing_classes':['']}
+    else:
+        metadata = MetadataCatalog.get(dataset)
+    visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
 
-    if gt: # TODO automatically detect gt vs pred?
+    if gt:  # TODO automatically detect gt vs pred?
         vis = visualizer.draw_dataset_dict(ddict)
         n = ddict['num_instances']
     else:
