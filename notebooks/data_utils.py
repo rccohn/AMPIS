@@ -224,10 +224,11 @@ def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, supp
     if img_path is None:
         img_path = pathlib.Path(ddict['file_name'])
     img_path = pathlib.Path(img_path)
+
+    metadata = MetadataCatalog.get(dataset)
     if suppress_labels:
-        metadata = {'thing_classes':['']}
-    else:
-        metadata = MetadataCatalog.get(dataset)
+        metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
+
     visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
 
     if gt:  # TODO automatically detect gt vs pred?
