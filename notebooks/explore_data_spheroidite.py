@@ -54,6 +54,7 @@ from detectron2.utils.visualizer import Visualizer
 import torch
 from torch.utils.cpp_extension import CUDA_HOME
 
+## TOTO preprocess function
 
 def get_files(pickle_file, n_test):
     """
@@ -104,15 +105,14 @@ def get_ddicts(file_subset):
     See output of get_files()
     img_paths: list of  path to original images
     label_paths: list of paths to annotation image (same order as img_paths )
-    dclass:  'Training,' 'Validation', 'Testing', etc 
+    dataset_class:  'Training,' 'Validation', 'Testing', etc
     """ 
     img_paths = file_subset['image_paths']
     label_paths = file_subset['annotation_paths']
-    dclass = file_subset['dclass']
-    metadata = get_metadata()
 
     ddicts = []
-    for idx, (ipath, lpath, d) in enumerate(zip(img_paths,label_paths, itertools.repeat(dclass))):
+    for idx, (ipath, lpath, d) in enumerate(zip(img_paths,
+                                                label_paths, itertools.repeat(file_subset['dclass']))):
 
         get_size = lambda path: [int(x) for x in path.stem.split('sizeRC_')[-1].split('_')]
         imsize = get_size(ipath)
@@ -274,19 +274,13 @@ if __name__ == '__main__':
 
                 # overlay predicted masks on image
                 out = predictor(img)
-                outputs[img_path.name] = {'outputs': out, 'file_name': img_path.name,
-                                          'dataset': dataset}  # store prediction outputs in dictionary
-                outputs_np[img_path.name] = {'outputs': data_utils.instances_to_numpy(out['instances']),
-                                             'file_name': img_path.name, 'dataset': dataset}  # store outputs as numpy
-                data_utils.quick_visualize_instances(out['instances'].to('cpu'),
+                outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
+                data_utils.quick_visualize_instances(out['instances'],
                                                      outdir, dataset, gt=False, img_path=img_path)
 
         pickle_out_path = pathlib.Path(outdir, 'outputs.pickle')
         print('saving predictions to {}'.format(pickle_out_path))
         with open(pickle_out_path, 'wb') as f:
             pickle.dump(outputs, f)
-        with open(pathlib.Path(outdir, 'outputs_np.pickle'), 'wb') as f:
-            pickle.dump(outputs_np, f)
-
 
 

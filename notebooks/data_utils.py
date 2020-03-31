@@ -160,7 +160,8 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
 
 def compress_pred(pred):
     """
-    Compresses predicted masks to RLE and stores output of predictions
+    Compresses predicted masks to RLE and converts outputs to numpy arrays. Results in
+    massively smaller
     Args:
         pred: outputs of detectron2 predictor
  
@@ -168,8 +169,31 @@ def compress_pred(pred):
         pred_compressed: pred with masks compressed to RLE format
     """
     pred.pred_masks = [RLE.encode(np.asfortranarray(x.to('cpu').numpy())) for x in pred.pred_masks]
+    pred.pred_boxes = pred.pred_boxes.tensor.to('cpu').numpy()
+    pred.scores = pred.scores.to('cpu').numpy()
+    pred.pred_classes = pred.pred_classes.to('cpu').numpy()
     return pred
 
+def format_outputs(filename, dataset, pred):
+    """
+    Formats model outputs consistently to make analysis easier later
+    Args:
+        filename: path of image corresponding to outputs
+        dataset: 'train' 'test' 'validation' etc
+        pred: model outputs from detectron2 predictor
+
+    note that this function applies compress_pred() to pred, which modifies
+    the instance predictions in-place to drastically reduce the space they take up
+    Returns:
+        results- dictionary of outputs
+    """
+
+    compress_pred(pred.instances)  # RLE encodes masks, converts tensors to numpy
+    results = {'file_name': filename,
+               'dataset': dataset,
+               'pred': pred}
+
+    return results
 
 
 def combine_gt_pred(gt, pred):

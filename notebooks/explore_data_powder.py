@@ -169,8 +169,8 @@ if __name__ == '__main__':
     print(torch.cuda.is_available(), CUDA_HOME)
     EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
 
-    json_dict = {'particles':'../data/raw/via_2.0.8/via_powder_particle_masks.json',
-                 'satellites':'../data/raw/via_2.0.8/via_satellite_masks.json'}
+    json_dict = {'particles': '../data/raw/via_2.0.8/via_powder_particle_masks.json',
+                 'satellites': '../data/raw/via_2.0.8/via_satellite_masks.json'}
 
 
     json_path = json_dict[EXPERIMENT_NAME]
@@ -268,19 +268,16 @@ if __name__ == '__main__':
         outputs = {}  # outputs as detectron2 instances objects
         outputs_np = {}  # outputs as numpy arrays
         for dataset in dataset_names:
-            for d in DatasetCatalog.get(dataset):  # TODO  replace with datasetloader to make this less hacky
+            for d in DatasetCatalog.get(dataset):
                 img_path = pathlib.Path(d['file_name'])
                 print('image filename: {}'.format(img_path.name))
                 img = cv2.imread(str(img_path))
-
                 # overlay predicted masks on image
                 out = predictor(img)
-                outputs[img_path.name] = {'outputs': out, 'file_name': img_path.name,
-                                          'dataset': dataset}  # store prediction outputs in dictionary
-                outputs_np[img_path.name] = {'outputs': data_utils.instances_to_numpy(out['instances']),
-                                             'file_name': img_path.name, 'dataset': dataset} # stores outputs as numpy
-                data_utils.quick_visualize_instances(out['instances'].to('cpu'),
+                outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
+                data_utils.quick_visualize_instances(out['instances'],
                                                      outdir, dataset, gt=False, img_path=img_path)
+
 
         pickle_out_path = pathlib.Path(outdir, 'outputs.pickle')
         print('saving predictions to {}'.format(pickle_out_path))

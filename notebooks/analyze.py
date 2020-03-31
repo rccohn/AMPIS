@@ -16,23 +16,21 @@ class instance_set(object):
     Simple way to organize a set of instances for a single image to ensure
     that formatting is consistent.
     """
-    def __init__(self, masks=None, boxes=None, class_idx=None, class_idx_map=None, scores=None, 
-                 img=None, filepath=None, dataset_type=None, pred_or_gt=None, HFW=None,):
+    def __init__(self, mask_format=None, bbox_mode=None, file_path=None, annotations=None, instances=None, img=None,
+                 dataset_class=None, pred_or_gt=None, HFW=None,):
         
-        self.masks = masks # array of masks n_mask x r x c
-        self.boxes = boxes # array of boxes n_mask x 4 
-        self.class_idx = class_idx # array of int class indices  n_mask
-        self.class_idx_map = class_idx_map # maps int class to string label/descriptor dict
-        self.scores = scores # array of confidence scores n_mask 
-        self.img = img # image r x c x 3
-        self.filepath = filepath # file name or path of image
-        self.dataset_type = dataset_type # 'Training', 'Validation', 'Test', etc
-        self.pred_or_gt = pred_or_gt # 'gt' for ground truth, 'pred' for model prediction
+        self.mask_format = mask_format # 'polygon' or 'bitmask'
+        self.bbox_mode = bbox_mode  # from detectron2.structures.BoxMode
+        self.img = img  # image r x c x 3
+        self.filepath = file_path  # file name or path of image
+        self.dataset_class = dataset_class  # 'Training', 'Validation', 'Test', etc
+        self.pred_or_gt = pred_or_gt  # 'gt' for ground truth, 'pred' for model prediction
         self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units. ##TODO automatically read this
-        self.rprops=None # region props, placeholder for self.compute_regionprops()
-    
+        self.rprops=None  # region props, placeholder for self.compute_regionprops()
+        self.instances = instances
+        self.annotations = annotations
     ##TODO __repr__?
-    
+
     
     def read_from_ddict(self, ddict, return_=False):
         """
@@ -43,24 +41,21 @@ class instance_set(object):
         :param return_: if True, function will return the instance_set object
         """
         
-        self.pred_or_gt = 'gt' # ddict assumed to be ground truth labels from via
+        self.pred_or_gt = 'gt'  # ddict assumed to be ground truth labels from via
+        self.dataset_class = ddict['dataset_class']
         self.filepath = pathlib.Path(ddict['file_name'])
-        self.dataset_type = ddict['dataset_class']
-        gt_ = extract_gt(ddict)
-        self.img = gt_['img']
-        self.masks = gt_['masks']
-        self.boxes = gt_['bboxes']
-        self.class_idx = gt_['class_idx']
-        self.class_idx_map = ddict['label_idx_mapper']
+        self.dataset_class = ddict['dataset_class']
+        self.mask_format = ddict['mask_format']
         self.HFW = ddict['HFW']
+        self.annotations = ddict['annotations']
         if return_:
             return self
         return
         
        
-    def read_from_numpy_out(self, filepath, outs, return_=False):
+    def read_from_model_out(self, filepath, outs, return_=False):
         """
-        Read predicted labels from output of detectron2 predictior
+        Read predicted labels from output of detectron2 predictor
         
         inputs:
         :param filepath: filename of prediction (from dictionary) 
@@ -68,13 +63,10 @@ class instance_set(object):
         :param return_: if True, function will return the instance_set object
         """
         self.filepath = filepath,
-        self.dataset_type = outs[1].split('_')[1] # Training or Validation
-        ann = outs[0]
-        self.masks = np.transpose(ann['masks'], (1,2,0)) # convert from n_mask x r x c to r x c x n_mask
-        self.boxes = ann['boxes'][:,(1,0,3,2)] # order bbox to have (x0,y0, x1, y1)
-        self.scores = ann['scores']
-        self.class_idx = ann['class']
-        
+        self.dataset_type = outs['dataset'].split('_')[1] # Training or Validation
+        self.mask_format = 'bitmask'
+        self.instances = outs[0]['instances']
+
         if return_:
             return self
     
@@ -128,154 +120,6 @@ class instance_set(object):
         returns a copy of the instance_set object
         """
         return copy.deepcopy(self)
-    
-
-def get_data_dicts(json_path):
-    """
-    Loads data in format consistent with detectron2.
-    Adapted from balloon example here:
-    https://colab.research.google.com/drive/16jcaJoc6bCFAQ96jDe2HwtXj7BMD_-m5
-    
-    Inputs: 
-      json_path: string or pathlib path to json file containing relevant annotations
-    
-    Outputs:
-      dataset_dicts: list(dic) of datasets compatible for detectron 2
-                     More information can be found at:
-                     https://detectron2.readthedocs.io/tutorials/datasets.html#
-    """
-    json_path = os.path.join(json_path) # needed for path manipulations
-    with open(json_path) as f:
-        via_data = json.load(f)
-        
-    # root directory of images is given by relative path in json file
-    img_root = os.path.join(os.path.dirname(json_path), via_data['_via_settings']['core']['default_filepath'])
-    imgs_anns = via_data['_via_img_metadata']
-    
-    
-    dataset_dicts = []
-    for idx, v in enumerate(imgs_anns.values()):
-        record = {}
-
-        filename = os.path.join(img_root, v["filename"])
-        
-        width, height = [int(x) for x in v['file_attributes']
-                         ['Size (width, height)'].split(', ')]
-
-        record["file_name"] = filename
-        record["image_id"] = idx
-        record["height"] = height
-        record["width"] = width
-        record["dataset_class"] = v['file_attributes']['Image Class']
-        record['HFW'] = v['file_attributes']['HFW']
-
-        annos = v["regions"]
-        objs = []
-        for anno in annos:
-            # not sure why this was here, commenting it out didn't seem to break anything
-            #assert not anno["region_attributes"] 
-            reg = anno['region_attributes']
-            anno = anno["shape_attributes"]
-            
-            # polygon masks is list of polygon coordinates in format ([x0,y0,x1,y1...xn,yn]) as specified in
-            # https://detectron2.readthedocs.io/modules/structures.html#detectron2.structures.PolygonMasks
-            px = anno["all_points_x"]
-            py = anno["all_points_y"]
-            poly = [(x + 0.5, y + 0.5) for x, y in zip(px, py)]
-            poly = [p for x in poly for p in x]
-            
-            obj = {
-                "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
-                "bbox_mode": 'BoxMode.XYXY_ABS', # boxes are given in absolute coordinates (ie not corner+width+height)
-                "segmentation": [poly],
-                "category_id": 0,
-                "Labels": reg
-            }
-            objs.append(obj)
-        record["annotations"] = objs
-        dataset_dicts.append(record)
-    labels_all = set()
-    for record in dataset_dicts:
-        for ann in record['annotations']:
-            labels_all.add(ann['Labels']['Label'])
-    label_mapper = {idx: label for idx,label in enumerate(labels_all)}
-    for ddict in dataset_dicts:
-        ddict['label_idx_mapper'] = label_mapper
-    return dataset_dicts
-
-
-def split_data_dict(dataset_dicts, get_subset=None):
-    """
-    Splits data from json into subsets (ie training/validation/testing)
-    
-    inputs 
-      dataset_dicts- list(dic) from get_data_dicts()
-      get_subset- function that identifies 
-                  class of each item  in dataset_dict.
-                  For example, get_subset(dataset_dicts[0])
-                  returns 'Training', 'Validation', 'Test', etc
-                  If None, default function is used
-    
-    returns
-      subs- dictionary where each key is the class of data
-            determined from get_subset, and value is a list
-            of dicts (same format of output of get_data_dicts())
-            with data of that class
-    """
-    
-    if get_subset is None:
-        get_subset = lambda x: x['dataset_class']
-    
-    
-    subsets = np.unique([get_subset(x) for x in dataset_dicts])
-
-    datasets = dict(zip(subsets, [[] for _ in subsets]))
-    
-    for d in dataset_dicts:
-        datasets[get_subset(d)].append(d)
-    
-    return datasets
-
-
-# TODO setup 'thing_classes' to read from data-- later, this requires a lot of changes
-def extract_gt(ddict):
-    """
-    Extracts image and ground truth instance segmentation labels from an input ddict.
-    :param ddict: dictionary of dataset compatible for detectron 2 (see get_data_dicts() function)
-    returns:
-    gt: dictionary containing ground truth image and labels.
-        gt contains the following keys and corresponding values:
-          'img': r x c x 3 RGB image,
-          'masks': n_instance x r x c array of boolean instance masks
-          'bboxes': n_instance x 4 array of coordinates for each bbox
-          'class_idx': n_instance element array of integers corresponding to
-                        the class label of each 
-    """
-    path = os.path.join(ddict['file_name'])
-    img = skimage.io.imread(path)
-    r, c = img.shape
-    img = skimage.color.gray2rgb(img)
-    n = len(ddict['annotations'])
-    masks = np.zeros((r, c, n), dtype=np.bool)
-    bboxes = np.zeros((n,4), dtype=np.float)
-    class_idx = np.zeros(n, np.int)
-    for i, ann in enumerate(ddict['annotations']):
-        # class idx can be read directly
-        class_idx[i] = ann['category_id']
-        # bbox must be reordered 
-        bboxes[i,:] = [ann['bbox'][i] for i in [1,0,3,2]] #  TODO see if order is correct
-        
-        # masks must be computed
-        mask_xycords = ann['segmentation'][0]
-        mask = np.asarray(list(zip(mask_xycords[1::2], 
-                                   mask_xycords[::2])), np.float)
-        masks[:,:,i] = skimage.draw.polygon2mask((r,c), mask)
-        
-    gt = {'img': img,
-              'masks': masks,
-              'bboxes': bboxes,
-              'class_idx': class_idx}
-    return gt
 
 
 def project_masks(masks):
