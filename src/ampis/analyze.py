@@ -1,23 +1,13 @@
-import colorsys
-import copy
-import json
-import matplotlib.pyplot as plt
 import numpy as np
-import os
-import pandas as pd
 import pathlib
 import pycocotools.mask as RLE
-import skimage.io 
-import skimage.measure
+from skimage.draw import polygon2mask
 
-#import mrcnn_utils
-from . import evaluate
-from . import structures
+from detectron2.structures import Instances, PolygonMasks
 
-from detectron2.data.detection_utils import annotations_to_instances
-from detectron2.structures import Instances, Boxes, BitMasks
-from detectron2.structures.masks import PolygonMasks
-from detectron2.utils.visualizer import Visualizer
+
+from . import data_utils
+from .structures import instance_set, RLEMasks
 
 def align_instance_sets(A, B):
     """
@@ -47,249 +37,6 @@ def align_instance_sets(A, B):
     return A_ordered, B_ordered
 
 
-class instance_set(object):
-    """
-    Simple way to organize a set of instances for a single image to ensure
-    that formatting is consistent.
-    """
-    def __init__(self, mask_format=None, bbox_mode=None, file_path=None, annotations=None, instances=None, img=None,
-                 dataset_class=None, pred_or_gt=None, HFW=None, randomstate=None):
-        
-        self.mask_format = mask_format # 'polygon' or 'bitmask'
-        self.bbox_mode = bbox_mode  # from detectron2.structures.BoxMode
-        self.img = img  # image r x c x 3
-        self.filepath = file_path  # file name or path of image
-        self.dataset_class = dataset_class  # 'Training', 'Validation', 'Test', etc
-        self.pred_or_gt = pred_or_gt  # 'gt' for ground truth, 'pred' for model prediction
-        self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units. ##TODO automatically read this
-        self.rprops=None  # region props, placeholder for self.compute_regionprops()
-        self.instances = instances
-        self.annotations = annotations
-        if randomstate is None:  # random state used for color assignment during visualization
-            randomstate=np.random.randint(2**32-1)
-        self.randomstate = randomstate
-        self.colors = None
-    ##TODO __repr__?
-
-    
-    def read_from_ddict(self, ddict, return_=False):
-        """
-        Read ground-truth labels from ddict (see get_data_dicts)
-        
-        inputs:
-        :param ddict: list(dic) from get_data_dicts
-        :param return_: if True, function will return the instance_set object
-        TODO update documentation for explore-data files to describe necessary fields
-        or create ddict class?
-        """
-
-        # default values-always set
-        self.pred_or_gt = 'gt'  # ddict assumed to be ground truth labels from get_ddict function
-
-        # required values- function will error out if these are not set
-        self.filepath = pathlib.Path(ddict['file_name'])
-        self.mask_format = ddict['mask_format']
-        image_size = (ddict['height'], ddict['width'])
-        #instances_gt = annotations_to_instances(ddict['annotations'], image_size, self.mask_format)
-
-        class_idx = np.asarray([anno['category_id'] for anno in ddict['annotations']], np.int)
-        bbox = Boxes([anno['bbox'] for anno in ddict['annotations']])
-        segs = [anno['segmentation'] for anno in ddict['annotations']]
-        segtype = type(segs[0])
-        if segtype == dict:
-            # RLE encoded mask
-            masks = structures.RLEMasks(segs)
-
-        elif segtype == np.ndarray:
-            if anno0.dtype == np.bool:
-                #  bitmask
-                masks = BitMasks(np.stack(segs))
-
-        else:
-            # list of (list or array) of coords in format [x0,y0,x1,y1,...xn,yn]
-            masks = PolygonMasks(segs)
-
-
-        instances = Instances(image_size, **{'masks': masks,
-                                             'boxes': bbox,
-                                             'class_idx': class_idx})
-        self.instances = instances
-        self.instances.colors = random_colors(len(instances), self.randomstate)
-
-
-
-
-        # optional values- default to None if not in ddict
-        self.dataset_class = ddict.get('dataset_class', None)
-        self.HFW = ddict.get('HFW', None)
-        if return_:
-            return self
-        return
-
-    def read_from_model_out(self, outs, return_=False):
-        """
-        Read predicted labels from output of detectron2 predictor, formatted
-        with data_utils.format_outputs() function.
-        
-        inputs:
-        :param outs: dictionary with following structure:
-        {'file_name': name of file, string or path object
-        'dataset': string name of dataset, should end with
-                    _Training, _Validation, _Test, etc
-        'pred': dictionary of detectron2 predictor outputs}
-        :param return_: if True, function will return the instance_set object
-        """
-        self.pred_or_gt = 'pred'
-        self.mask_format = 'bitmask'  # model outs assumed to be RLE bitmasks
-
-        self.filepath = outs['file_name']
-        self.dataset_type = outs['dataset'].split('_')[1]  # Training, Validation, etc
-
-        instances_pred = outs['pred']['instances']
-
-        instances = Instances(instances_pred.image_size,
-                              **{'masks': instances_pred.pred_masks,
-                                 'boxes': instances_pred.pred_boxes,
-                                 'class_idx': instances_pred.pred_classes,
-                                 'scores': instances_pred.scores})
-        self.instances = instances
-        self.instances.colors = random_colors(len(self.instances), self.randomstate)
-
-        if return_:
-            return self
-
-    def filter_mask_size(self, min_thresh=100, max_thresh=100000):
-        """
-        Remove instances with mask areas outside of the interval (min_thresh, max_thresh.)
-
-        inputs:
-        :param instances:- instances object
-        :param min_thresh: int- minimum mask size threshold in pixels, default 100, or None to not use this criteria
-        :param max_thresh: int- maximum mask size threshold in pixels, default 100000, or None to not use this criteria
-
-        returns:
-            * instances_filtered-instances object which only includes instances within given size thresholds
-        """
-
-        masks = self.instances.masks
-        # determine which instances contain inlier masks
-        areas = _mask_areas(masks)
-
-        if min_thresh is None:
-            inlier_min = np.ones(area.shape, np.bool)
-        else:
-            inlier_min = areas > min_thresh
-        if max_thresh is None:
-            inlier_max = np.ones(area.shape, np.bool)
-        else:
-            inlier_max = areas < max_thresh
-
-        inliers_bool = np.logical_and(inlier_min, inlier_max)
-
-        new_instance_fields = {key: value[inliers_bool] for key, value
-                               in self.instances._fields.items()}
-
-        instances_filtered = Instances(self.instances.image_size,
-                                       **new_instance_fields)
-
-        return instances_filtered
-
-    def compute_rprops(self, keys=None, return_df=False):
-        """Applies skimage.measure.regionprops_table to masks for analysis.
-        :param keys: properties to be stored in dataframe. If None, default values will be used.
-        Default values: 'area', 'equivalent_diameter','major_axis_length', 'perimeter','solidity','orientation.'
-        For more info, see:
-        https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops_table.
-        :param return_df: bool, if True, function will return dataframe
-        
-        stored: 
-            self.rprops: pandas dataframe with desired properties, and an additional column for the class_idx.       
-        returns:
-           self.rprops will be returned as a dataframe if return_df is True
-        """
-        
-        if keys is None: # use default values
-            keys = ['area', 'equivalent_diameter','major_axis_length', 'perimeter','solidity','orientation']
-        rprops = [skimage.measure.regionprops_table(mask.astype(np.int),properties=keys)  
-                                                    for mask in np.transpose(self.masks, (2,0,1))]
-        df = pd.DataFrame(rprops)
-        df['class_idx'] = self.class_idx
-        self.rprops = df
-        
-        if return_df:
-            return self.rprops
-        
-    
-    def copy(self):
-        """
-        returns a copy of the instance_set object
-        """
-        return copy.deepcopy(self)
-
-
-def random_colors(N, seed, bright=True):  # controls randomstate for plotting consistentcy
-    """
-    Generate random colors.
-    To get visually distinct colors, generate them in HSV space then
-    convert to RGB.
-    """
-
-    rs = np.random.RandomState(seed=seed)
-
-    brightness = 1.0 if bright else 0.7
-    hsv = [(i / N, 1, brightness) for i in range(N)]
-    colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
-    rs.shuffle(colors)
-    colors = np.asarray(colors)
-    return colors
-
-
-def quick_display_instances(img, metadata, iset, show_class_idx=False, show_scores=False,  ax=None, colors=None):
-
-    # by default, colors will be extracted from instances. Otherwise, custom colors can be supplied.
-    if colors is None:
-        colors = iset.instances.colors
-
-    V = Visualizer(img, metadata, scale=1)
-
-    if show_class_idx:
-        if show_scores:
-            extra = ': '
-        else:
-            extra = ''
-        class_idx = ['{}{}'.format(metadata['thing_classes'][idx], extra) for idx in iset.instances.class_idx]
-    else:
-        class_idx = ['' for x in iset.instances.class_idx]
-
-    if show_scores:
-        scores = ['{:.3f}'.format(x) for x in iset.instances.scores]
-    else:
-        scores = ['' for x in iset.instances.class_idx] # gt do not have scores,
-        # so must iterate through a field that exists
-
-    labels = ['{}{}'.format(idx, score) for idx, score in zip(class_idx, scores)]
-
-    masktype = type(iset.instances.masks)
-    if masktype == structures.RLEMasks:
-        masks = iset.instances.masks.masks
-    else:
-        masks = iset.instances.masks
-
-    vis = V.overlay_instances(boxes=iset.instances.boxes, masks=masks, labels=labels,
-                              assigned_colors=colors)
-    vis_img = vis.get_image()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10,7), dpi=150)
-        ax.imshow(vis_img)
-        ax.axis('off')
-        plt.show()
-
-    else:
-        ax.imshow(vis_img)
-        ax.axis('off')
-
-
 
 def project_masks(masks):
     """
@@ -309,6 +56,18 @@ def project_masks(masks):
         labels[mask] = i
     
     return labels
+
+
+def convert_masks(masks):
+    """
+
+    Args:
+        masks:
+
+    Returns:
+
+    """
+    masktype = type(masks)
 
 
 def IOU(true_mask, predicted_mask):
@@ -375,11 +134,11 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     
     # get bboxes
     if gt_bbox is None:
-        gt_bbox = mrcnn_utils.extract_bboxes(gt_masks)
+        gt_bbox = data_utils.extract_bboxes(gt_masks)
     else: # TODO handle non-integer bboxes (with rounding and limits at edge of images)
         gt_bbox = gt_bbox.astype(np.int) if gt_bbox.dtype is not np.int else gt_bbox
     if pred_bbox is None:
-        pred_bbox = mrcnn_utils.extract_bboxes(pred_masks)
+        pred_bbox = data_utils.extract_bboxes(pred_masks)
     else:
         pred_bbox = pred_bbox.astype(np.int) if pred_bbox.dtype is not np.int else pred_bbox
     
@@ -458,60 +217,187 @@ def expand_masks(masks):
     return bitmasks
 
 
-def _shoelace_area(x, y):
+def masks_to_rle(masks):
     """
-    Computes area of simple polygon from coordinates
-    shoelace formula https://en.wikipedia.org/wiki/Shoelace_formula
-    implementation from:
-    https://stackoverflow.com/questions/24467972/calculate-area-of-polygon-given-x-y-coordinates
+
     Args:
-        x: n element array of x coordinates
-        y: n element array of y coordinates
-    Returns: area- float- area of polygon in pixels
-    # TODO verify this work compared to boolean mask areas
-    """
-    area = 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
-    return area
+        masks:
 
+    Returns:
 
-def _mask_areas(masks):
     """
-    Computes area in pixels of each mask in masks
+    if type(masks) == list:
+        if type(masks[0]) == dict:
+            # assumed to already be in RLE format
+            return masks
+
+    if type(masks) == RLEMasks:
+        rle = [x.masks for x in masks]
+        return rle
+
+    elif type(masks) == PolygonMasks:
+        raise NotImplementedError('RLE only for now')
+        # for mask in masks:
+        #     cords = mask.polygon
+        #     polygon2mask()
+
+def masks_to_bitmask_array(masks):
+    """
+
     Args:
-        masks: bitmask, polygonmask, or array containing masks
+        masks:
 
-    Returns: n_mask element array of mask areas
+    Returns:
 
-    TODO Test this
-        For RLE masks, look into coco api   mask.area
-        For polygon masks, look into
-            def PolyArea(x,y):
-                return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+    """
+    dtype = type(masks)
+
+    if dtype == np.ndarray:
+        # masks are already array
+        return masks
+
+    elif dtype == list:
+        if type(masks[0]) == dict:
+            # RLE masks
+            return RLE.decode(masks).transpose((2, 0, 1))
+        elif type(masks[0]) == (list or np.ndarray):
+            # polygon mask
+            raise NotImplementedError
+
+    elif dtype == RLEMasks:
+        return RLE.decode(masks.masks).transpose((2, 0, 1))
+
+    else:
+        raise NotImplementedError
+
+
+def _piecewise_iou(a, b, interval=80):
+    """
+    helper function for computing iou since
+    this function apparently can only handle a max of 80 x 80
+    instances
+    Args:
+        a, b: full list (ie can be more than 80 elements)
+        interval: int, max length of list that can be input to function
+
+    Returns:
+
+    """
+    imax = len(a)
+    jmax = len(b)
+    target = np.zeros((imax, jmax))
+
+    n_seg_a = imax // interval + int(imax % interval > 0)
+    n_seg_b = jmax // interval + int(jmax % interval > 0)
+
+
+
+    for i in range(n_seg_a):
+        i_int = interval * np.array([i, i+1], np.int)
+        for j in range(n_seg_b):
+            j_int = interval * np.array([j, j+1], np.int)
+            a_args = a[i_int[0]:i_int[1]]
+            b_args = b[j_int[0]:j_int[1]]
+
+            target[i_int[0]:i_int[1], j_int[0]:j_int[1]] = RLE.iou(a_args, b_args, [False for _ in range(len(b_args))])
+
+    return target
+
+
+def _piecewise_iou2(gt, pred, iou_thresh=0.5, interval=80):
+    """
+    helper function for computing iou since
+    this function apparently can only handle a max of 80 x 80
+    instances
+    Args:
+        gt, pred: full list of RLE instances (ie can be more than 80 elements)
+        iou_thresh: float between 0 and 1, minimim IOU must be above this for instances to match
+        interval: int, max length of list that can be input to function
+
+    Returns:
+
+    """
+    jmax = len(pred)
+
+
+    tp = []
+    fn = []
+    iou = []
+    pred_matched = np.zeros(len(pred), np.bool)
+    n_seg_pred = jmax // interval + int(jmax % interval > 0)
+
+    for gt_idx, gt_mask in enumerate(gt):
+        IOU_max = 0
+        IOU_argmax = -1
+        for j in range(n_seg_pred):
+            j_int = interval * np.array([j, j+1], np.int)
+            pred_args = pred[j_int[0]:j_int[1]]
+
+            iou_scores_ = RLE.iou([gt_mask], pred, [False for _ in range(len(pred_args))])[0]
+            iou_amax_j = np.argmax(iou_scores_)
+            iou_max_j = iou_scores_[iou_amax_j]
+
+            if iou_max_j > IOU_max:
+                IOU_max = iou_max_j
+                IOU_argmax = iou_amax_j
+
+
+        if IOU_max > iou_thresh:
+            tp.append([gt_idx, IOU_argmax])
+            iou.append(IOU_max)
+            pred_matched[IOU_argmax] = True
+        else:
+            fn.append(gt_idx)
+
+    fp = np.array([x for x, matched in enumerate(pred_matched) if not matched], np.int)
+
+    results = {'tp': np.asarray(tp, np.int),
+               'fn': np.asarray(fn, np.int),
+               'fp': np.asarray(fp, np.int),
+               'iou': np.asarray(iou)}
+
+    return results
+
+
+
+def rle_instance_matcher(gt, pred, iou_thresh=0.5):
+    """
+    Performs instance matching (single class) to determine true positives,
+    false positives, and false negative instance predictions.
+
+    Instances are matched on the basis of Intersection over Union (IOU,)
+    or ratio of areas of overlap between 2 masks to the total area occupied by both masks.
+    IOU (A,B) = sum(A & B)/sum(A | B)
+
+    Args:
+        gt, pred: ampis.structures.RLEMasks or detectron2.structures.polygonmasks
+
+    Returns:
+        results: dictionary with the following structure:
+        {
+        'tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance for match i. The second element corresponds to the index of the pred index for match i.
+        'gt_fn': n_fn element array where each element is a ground truth instance that was not matched (false negative)
+        'pred_fp': n_fp element array where each element is a predicted instance that was not matched (false positive)
+        'IOU_match': n_match element array of IOU scores for each match.
+        }
+
+
+    TODO currently all masks are compared. If this is slow, see if you can optimize to
+        only search predicted masks that are close to ground truth masks
+        (maybe use bbox iou or another data structure to keep track of neighbors?)
+    TODO Clean up functions???
     """
 
-    masktype = type(masks)
-
-    if masktype == np.ndarray:
-        # masks are already expanded, compute area directly
-        return masks.sum(axis=(1, 2), dtype=np.uint)
-
-    elif masktype == PolygonMasks:
-        # polygon masks given as array of coordinates [x0,y0,x1,y1,...xn,yn]
-        return np.asarray([_shoelace_area(coords[0][::2], coords[0][1::2]) for coords in masks.polygons])
-    elif masktype == list and type(masks[0]) == dict:
-        # RLE encoded masks
-        return RLE.area(masks)
-    elif masktype == structures.RLEMasks:
-        return RLE.area(masks.masks)
+    # convert masks if needed
+    gt = masks_to_rle(gt)
+    pred = masks_to_rle(pred)
+    return _piecewise_iou2(gt, pred, iou_thresh)
 
 
-
-
-    
 def mask_match_stats(gt, pred, IOU_thresh=0.5):
     """
         Computes match and mask statistics for a give pair of masks (of the same class.) Match statistics describe the number of instances that were correctly matched with IOU above the threshold. Mask statistics describe how well the matched masks agree with each other. For each set of tests, the precision and recall are reported. 
-    
+    TODO update docs
     Inputs:
     :param gt: r x c x n_mask boolean array of ground truth masks
     :param pred: r x c x n_mask boolean array of predicted masks
@@ -527,46 +413,43 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5):
                      each matched pair of instances
     """
     ## match scoring
-    match_results_ = fast_instance_match(gt, pred, IOU_thresh=IOU_thresh)
-    matches_ = np.asarray(match_results_['gt_tp'])
+    gtmasks = masks_to_rle(gt)
+    predmasks = masks_to_rle(pred)
+    match_results_ = rle_instance_matcher(gtmasks, predmasks, iou_thresh=IOU_thresh)
+    matches_ = np.asarray(match_results_['tp'])
     TP_match_ = len(matches_) #  true positive
-    FN_match_ = len(match_results_['gt_fn']) #  false negative
-    FP_match_ = len(match_results_['pred_fp']) #  false positive
+    FN_match_ = len(match_results_['fn']) #  false negative
+    FP_match_ = len(match_results_['fp']) #  false positive
 
     match_precision = TP_match_ / (TP_match_ + FP_match_)
     match_recall = TP_match_ / (TP_match_ + FN_match_)
 
-    ## mask scoring
-    
-    # only include masks that were correctly matched
+    gtmasks_tp = [gtmasks[i[0]] for i in matches_]
+    predmasks_tp = [predmasks[i[1]] for i in matches_]
+    mask_true_positive = np.array([RLE.area(RLE.merge([m1,m2], intersect=True)) for m1, m2 in zip(gtmasks_tp, predmasks_tp)],
+                            np.int)
+    tp_gt_area = np.array([RLE.area(m) for m in gtmasks_tp], np.int)
+    tp_pred_area = np.array([RLE.area(m) for m in predmasks_tp], np.int)
 
-    matched_masks_gt_ = gt[:,:,matches_[:,0]]
-    matched_masks_pred_ = pred[:,:,matches_[:,1]]
-    
-    TP_mask_ = np.logical_and(matched_masks_gt_,
-                             matched_masks_pred_,).sum((0,1))  # true positive
-    FN_mask_ =  np.logical_and(matched_masks_gt_,
-                              np.logical_not(matched_masks_pred_)).sum((0,1))  # false negative
-    FP_mask_ =  np.logical_and(np.logical_not(matched_masks_gt_),
-                               matched_masks_pred_).sum((0,1))  # false positive
-    
-    mask_precision = TP_mask_ / (TP_mask_ + FP_mask_)
-    mask_recall = TP_mask_ / (TP_mask_ + FN_mask_)
-    
+    mask_false_positive = tp_pred_area - mask_true_positive
+    mask_false_negative = tp_gt_area - mask_true_positive
+
+    mask_precision = mask_true_positive /(mask_true_positive + mask_false_positive)
+    mask_recall = mask_true_positive /(mask_true_positive + mask_false_negative)
+
     return {'match_precision': match_precision,
            'match_recall': match_recall,
            'mask_precision': mask_precision,
            'mask_recall': mask_recall}
 
-
-def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, match_results=None, TP_gt=False):
+# TODO move to visualize or rename?
+def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
     """
     Computes matches between gt and pred masks. Returns the masks, boxes, and colors in a format that is convenient for visualizing the match performance number of correctly matched instances.
     inputs:
-    :param gt_masks: r x c x n_mask_gt boolean array of ground truth masks
-    :param gt_bbox: n_mask_gt x 4 array of bbox coordinates for each ground truth mask
-    :param pred_masks: r x c x n_mask_pred boolean array of predicted masks
-    :param pred_bbox: n_mask_pred x 4 array of bbox coordinates for each predicted mask
+    TODO update documentation
+    :param gt: r x c x n_mask_gt boolean array of ground truth masks
+    :param pred: r x c x n_mask_pred boolean array of predicted masks
     :param colormap: dictionary with keys 'TP', 'FP', 'FN'. The value corresponding to each key is a 1x3 float array of RGB color values.
     If colormap is None, default colors will be used.
     :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
@@ -579,9 +462,18 @@ def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, ma
     colors: n_mask_match x 3 array of RGB colors for each mask. Colors can be used to visually distinguish true positives, false positives, and false negatives. 
     colormap: only returned if colormap=None. Returns the default colormap.
     """
-    
-    return_colormap = colormap == None
-    
+    if match_results is None:
+        match_results = rle_instance_matcher(gt, pred)
+
+    return_colormap = colormap is None
+
+    gt_masks = masks_to_rle(gt.instances.masks)
+    pred_masks = masks_to_rle(pred.instances.masks)
+
+    gt_bbox = gt.instances.boxes if type(gt.instances.boxes) == np.ndarray else gt.instances.boxes.tensor.numpy()
+    pred_bbox = pred.instances.boxes if type(pred.instances.boxes) == np.ndarray \
+        else pred.instances.boxes.tensor.numpy()
+
     #TODO pick prettier values!
     if colormap is None:  # default values
         colormap = {'TP': np.asarray([1,0,0],np.float),
@@ -592,37 +484,38 @@ def match_visualizer(gt_masks, gt_bbox, pred_masks, pred_bbox, colormap=None, ma
         match_results = fast_instance_match(gt_masks, pred_masks)
     
     if TP_gt:
-        TP_idx = match_results['gt_tp'][:,0]
-        TP_masks = gt_masks[:,:,TP_idx]
+        TP_idx = match_results['tp'][:, 0]
+        TP_masks = [gt_masks[i] for i in TP_idx]
         TP_bbox = gt_bbox[TP_idx]
     else:
-        TP_idx = match_results['gt_tp'][:,1]
-        TP_masks = pred_masks[:,:,TP_idx]
+        TP_idx = match_results['tp'][:, 1]
+        TP_masks = [pred_masks[i] for i in TP_idx]
         TP_bbox = pred_bbox[TP_idx]
 
-    TP_colors = np.tile(colormap['TP'], (TP_masks.shape[2],1))
+    TP_colors = np.tile(colormap['TP'], (len(TP_masks), 1))
     
-    FP_idx = match_results['pred_fp']
-    FP_masks = pred_masks[:,:,FP_idx]
+    FP_idx = match_results['fp']
+    FP_masks = [pred_masks[i] for i in FP_idx]
     FP_bbox = pred_bbox[FP_idx]
-    FP_colors = np.tile(colormap['FP'], (FP_masks.shape[2],1))
+    FP_colors = np.tile(colormap['FP'], (len(FP_masks), 1))
     
-    FN_idx = match_results['gt_fn']
-    FN_masks = gt_masks[:,:,FN_idx]
+    FN_idx = match_results['fn']
+    FN_masks = [gt_masks[i] for i in FN_idx]
     FN_bbox = gt_bbox[FN_idx]
-    FN_colors = np.tile(colormap['FN'], (FN_masks.shape[2],1))
+    FN_colors = np.tile(colormap['FN'], (len(FN_masks), 1))
     
-    masks = np.concatenate((TP_masks, FP_masks, FN_masks), axis=2)
+    masks = RLEMasks(TP_masks +  FP_masks + FN_masks)
     bbox = np.concatenate((TP_bbox, FP_bbox, FN_bbox), axis=0)
     colors = np.concatenate((TP_colors, FP_colors, FN_colors), axis=0)
-    
-    outs = [masks, bbox, colors]
+
+    i = instance_set()
+    i.instances = Instances(image_size=masks.masks[0]['size'], **{'masks': masks, 'boxes': bbox, 'colors': colors})
+
     if return_colormap:
-        outs.append(colormap)
-    
-    return tuple(outs)
+        return i, colormap
+    return i
 
-
+# TODO move to visualize or rename?
 def mask_visualizer(gt_masks, pred_masks, match_results=None):
     """
     Computes matches between gt and pred masks. Returns a mask image where each pixel describes if the pixel in the masks is a true positive false positive, false negative, or a combinaton of these.
@@ -638,26 +531,26 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
     """
     # defaults
     if match_results is None:
-        match_results = fast_instance_match(gt_masks, pred_masks)
+        match_results = rle_instance_matcher(gt_masks, pred_masks)
+    gt_masks = masks_to_bitmask_array(gt_masks)
+    pred_masks = masks_to_bitmask_array(pred_masks)
+
+    tp_idx = match_results['tp']
+    matched_gt = gt_masks[tp_idx[:, 0]]
+    matched_pred = pred_masks[tp_idx[:, 1]]
     
-    tp_idx = match_results['gt_tp']
-    matched_gt = gt_masks[:,:,tp_idx[:,0]]
-    matched_pred = pred_masks[:,:,tp_idx[:,1]]
+    TP_mask_ = np.logical_and(matched_gt, matched_pred,)  # true positive
+    FN_mask_ =  np.logical_and(matched_gt, np.logical_not(matched_pred))  # false negative
+    FP_mask_ =  np.logical_and(np.logical_not(matched_gt), matched_pred)  # false positive
+    print(TP_mask_.shape)
     
-    TP_mask_ = np.logical_and(matched_gt,
-                             matched_pred,)  # true positive
-    FN_mask_ =  np.logical_and(matched_gt,
-                              np.logical_not(matched_pred))  # false negative
-    FP_mask_ =  np.logical_and(np.logical_not(matched_gt),
-                               matched_pred)  # false positive
-    
-    
-    project = lambda masks: np.logical_or.reduce(masks, axis=2)
+    project = lambda masks: np.logical_or.reduce(masks, axis=0)
+
     
     TP_reduced = project(TP_mask_).astype(np.uint)
     FN_reduced = project(FN_mask_).astype(np.uint) * 2
     FP_reduced = project(FP_mask_).astype(np.uint) * 4
-    
+    print(TP_reduced.shape)
     # Code | TP   FN   FP 
     #------+-------------
     # 0    |  F    F   F
@@ -673,7 +566,13 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
     masks = np.zeros((*pixel_map.shape[:2], 7), np.bool)
     for i in range(1,8):
         masks[:,:,i-1] = pixel_map == i
-    
+
+    masks = np.asfortranarray(masks)#.transpose((0,1,2)))
+    print(masks.shape)
+    masks = RLE.encode(masks)
+    print(len(masks))
+    masks = RLEMasks(masks)
+
     # maps index to colors
     color_mapper = np.array([
        [0.   , 0.   , 0.   ],
@@ -692,5 +591,9 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
     colors = [color_mapper[1:], 
               ['Other', 'TP','FN','TP+FN','FP','TP+FP','FN+FP','TP+FN+FP']]
     
-    return masks, colors
-    
+
+    i = instance_set()
+    i.instances = Instances(image_size=masks.masks[0]['size'], **{'masks': masks, 'colors': colors[0],
+                                                                  'boxes': np.zeros((len(masks), 4))})
+
+    return i, colors[1]

@@ -1,5 +1,6 @@
 from . import analyze
 from . import characterize
 from . import data_utils
-from . import  structures
+from . import structures
+from . import visualize
 
