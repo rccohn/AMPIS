@@ -10,8 +10,6 @@ if not gui:
 # regular module imports
 import cv2
 import itertools
-import json
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pathlib
@@ -20,41 +18,29 @@ import skimage
 import skimage.io
 import skimage.measure
 from skimage.transform import resize as im_resize
+import sys
 
 import pycocotools.mask as RLE
-import data_utils
 
 ## detectron2
 from detectron2 import model_zoo
-from detectron2.checkpoint import Checkpointer, PeriodicCheckpointer
-from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import (
     DatasetCatalog,
     MetadataCatalog,
-    build_detection_test_loader,
-    build_detection_train_loader,
 )
-from detectron2.data.detection_utils import annotations_to_instances
 from detectron2.engine import DefaultTrainer, DefaultPredictor
-from detectron2.modeling import build_model
-from detectron2.solver import build_lr_scheduler, build_optimizer
 from detectron2.structures import Boxes, BoxMode
-import detectron2.utils.comm as comm
-from detectron2.utils.events import (
-    CommonMetricPrinter,
-    EventStorage,
-    JSONWriter,
-    TensorboardXWriter,
-)
-from detectron2.utils.visualizer import Visualizer
+
+ampis_root = pathlib.Path('../src/')
+sys.path.append(str(ampis_root))
+from ampis import data_utils, visualize
 
 
-# verify cuda is installed and running correctly
 import torch
 from torch.utils.cpp_extension import CUDA_HOME
 
-## TOTO preprocess function
+## TODO preprocess function
 
 def get_files(pickle_file, n_test):
     """
@@ -164,8 +150,7 @@ def get_metadata():
     Metadata = {'thing_classes': ['spheroidite']}
     return Metadata
 
-
-if __name__ == '__main__':
+def main():
     print(torch.cuda.is_available(), CUDA_HOME)
 
     pickle_path = pathlib.Path('..', 'data', 'raw', 'spheroidite-images', 'spheroidite-files.pickle')
@@ -193,11 +178,11 @@ if __name__ == '__main__':
         "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))  # use mask rcnn preset config
 
     cfg.INPUT.MASK_FORMAT = 'bitmask'  # 'polygon' or 'bitmask'.
-    cfg.DATASETS.TRAIN = ("{}_Training".format(EXPERIMENT_NAME),)  #  name of training dataset (must be registered)
+    cfg.DATASETS.TRAIN = ("{}_Training".format(EXPERIMENT_NAME),)  # name of training dataset (must be registered)
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
-    cfg.SOLVER.CHECKPOINT_PERIOD = 1000 # save checkpoint (model weights) after this many iterations
+    cfg.SOLVER.CHECKPOINT_PERIOD = 1000  # save checkpoint (model weights) after this many iterations
     cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # validation loss will be computed at every checkpoint
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
@@ -233,7 +218,7 @@ if __name__ == '__main__':
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset):
             print('visualizing gt instances for {}'.format(d['file_name']))
-            data_utils.quick_visualize_instances(d, gt_figure_root, dataset, suppress_labels=True)
+            visualize.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
@@ -263,8 +248,8 @@ if __name__ == '__main__':
         outdir = pathlib.Path(pred_figure_root, p.stem)
         os.makedirs(outdir, exist_ok=True)
         predictor = DefaultPredictor(cfg)
-        outputs = {} # raw outputs from model
-        outputs_np = {} # outputs converted to numpy arrays for easier analysis
+        outputs = {}  # raw outputs from model
+        outputs_np = {}  # outputs converted to numpy arrays for easier analysis
 
         for dataset in dataset_names:
             for d in DatasetCatalog.get(dataset):
@@ -275,8 +260,8 @@ if __name__ == '__main__':
                 # overlay predicted masks on image
                 out = predictor(img)
                 outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
-                data_utils.quick_visualize_instances(out['instances'],
-                                                     outdir, dataset, gt=False, img_path=img_path)
+                data_utils.quick_visualize_ddicts(out['instances'],
+                                                  outdir, dataset, gt=False, img_path=img_path)
 
         pickle_out_path = pathlib.Path(outdir, 'outputs.pickle')
         print('saving predictions to {}'.format(pickle_out_path))
@@ -284,3 +269,5 @@ if __name__ == '__main__':
             pickle.dump(outputs, f)
 
 
+if __name__ == '__main__':
+    main()

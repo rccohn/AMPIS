@@ -217,11 +217,12 @@ def expand_masks(masks):
     return bitmasks
 
 
-def masks_to_rle(masks):
+def masks_to_rle(masks, size=None):
     """
 
     Args:
         masks:
+        size: only needed for polygonmasks- tuple(r, c) r, c are height and width of image in pixels
 
     Returns:
 
@@ -230,18 +231,23 @@ def masks_to_rle(masks):
         if type(masks[0]) == dict:
             # assumed to already be in RLE format
             return masks
+        elif type(masks[0]) == list:
+            raise(NotImplementedError('):'))
 
     if type(masks) == RLEMasks:
-        rle = [x.masks for x in masks]
+        rle = masks.masks
         return rle
 
     elif type(masks) == PolygonMasks:
-        raise NotImplementedError('RLE only for now')
+        assert size is not None
+        rle = [RLE.frPyObjects(p, *size)[0] for p in masks.polygons]
+
+        return rle
         # for mask in masks:
         #     cords = mask.polygon
         #     polygon2mask()
 
-def masks_to_bitmask_array(masks):
+def masks_to_bitmask_array(masks, size=None):
     """
 
     Args:
@@ -261,11 +267,18 @@ def masks_to_bitmask_array(masks):
             # RLE masks
             return RLE.decode(masks).transpose((2, 0, 1))
         elif type(masks[0]) == (list or np.ndarray):
-            # polygon mask
             raise NotImplementedError
 
     elif dtype == RLEMasks:
         return RLE.decode(masks.masks).transpose((2, 0, 1))
+
+    elif dtype == PolygonMasks:
+        # polygon mask
+        return np.stack([polygon2mask(  # stack along axis 0 to get (n x r x c)
+            size, np.stack((p[0][1::2],  # x coords
+                            p[0][0::2]),  # y coords
+                           axis=1))   # stack along axis 1 to get (n_p x 2)
+                        for p in masks.polygons])  # for every polygon
 
     else:
         raise NotImplementedError
@@ -325,7 +338,6 @@ def _piecewise_iou2(gt, pred, iou_thresh=0.5, interval=80):
     iou = []
     pred_matched = np.zeros(len(pred), np.bool)
     n_seg_pred = jmax // interval + int(jmax % interval > 0)
-
     for gt_idx, gt_mask in enumerate(gt):
         IOU_max = 0
         IOU_argmax = -1
@@ -360,7 +372,7 @@ def _piecewise_iou2(gt, pred, iou_thresh=0.5, interval=80):
 
 
 
-def rle_instance_matcher(gt, pred, iou_thresh=0.5):
+def rle_instance_matcher(gt, pred, iou_thresh=0.5, size=None):
     """
     Performs instance matching (single class) to determine true positives,
     false positives, and false negative instance predictions.
@@ -371,6 +383,7 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5):
 
     Args:
         gt, pred: ampis.structures.RLEMasks or detectron2.structures.polygonmasks
+        size: None if bitmasks or RLEmasks, tuple(r, c) image height, width in pixels if gt or pred is polygonmasks
 
     Returns:
         results: dictionary with the following structure:
@@ -389,12 +402,12 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5):
     """
 
     # convert masks if needed
-    gt = masks_to_rle(gt)
-    pred = masks_to_rle(pred)
+    gt = masks_to_rle(gt, size)
+    pred = masks_to_rle(pred, size)
     return _piecewise_iou2(gt, pred, iou_thresh)
 
 
-def mask_match_stats(gt, pred, IOU_thresh=0.5):
+def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
     """
         Computes match and mask statistics for a give pair of masks (of the same class.) Match statistics describe the number of instances that were correctly matched with IOU above the threshold. Mask statistics describe how well the matched masks agree with each other. For each set of tests, the precision and recall are reported. 
     TODO update docs
@@ -402,6 +415,8 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5):
     :param gt: r x c x n_mask boolean array of ground truth masks
     :param pred: r x c x n_mask boolean array of predicted masks
     :param IOU_thresh: IOU threshold for matching (see fast_instance_match())
+    :param size: size passed to masks_to_rle. Can be None for rle masks or bitmasks. For polygonmasks, must be
+                tuple (r, c) for the image height and width in pixels, respectively.
     
     Returns:
     output: dictionary with the following key:value pairs:
@@ -413,9 +428,11 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5):
                      each matched pair of instances
     """
     ## match scoring
-    gtmasks = masks_to_rle(gt)
-    predmasks = masks_to_rle(pred)
-    match_results_ = rle_instance_matcher(gtmasks, predmasks, iou_thresh=IOU_thresh)
+    gtmasks = masks_to_rle(gt, size)
+    predmasks = masks_to_rle(pred, size)
+
+
+    match_results_ = rle_instance_matcher(gtmasks, predmasks, iou_thresh=IOU_thresh, size=size)
     matches_ = np.asarray(match_results_['tp'])
     TP_match_ = len(matches_) #  true positive
     FN_match_ = len(match_results_['fn']) #  false negative
@@ -467,8 +484,9 @@ def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
 
     return_colormap = colormap is None
 
-    gt_masks = masks_to_rle(gt.instances.masks)
-    pred_masks = masks_to_rle(pred.instances.masks)
+    size = gt.instances.image_size
+    gt_masks = masks_to_rle(gt.instances.masks, size)
+    pred_masks = masks_to_rle(pred.instances.masks, size)
 
     gt_bbox = gt.instances.boxes if type(gt.instances.boxes) == np.ndarray else gt.instances.boxes.tensor.numpy()
     pred_bbox = pred.instances.boxes if type(pred.instances.boxes) == np.ndarray \
@@ -516,13 +534,14 @@ def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
     return i
 
 # TODO move to visualize or rename?
-def mask_visualizer(gt_masks, pred_masks, match_results=None):
+def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None):
     """
     Computes matches between gt and pred masks. Returns a mask image where each pixel describes if the pixel in the masks is a true positive false positive, false negative, or a combinaton of these.
     inputs:
     :param gt_masks: r x c x n_mask_gt boolean array of ground truth masks
     :param pred_masks: r x c x n_mask_pred boolean array of predicted masks
     :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
+    :param size: None if gt and pred are RLE masks, otherwise tuple (r, c) image height, image width
     If match_results is None, they will be computed using fast_instance_match().
     
     returns:
@@ -531,9 +550,9 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
     """
     # defaults
     if match_results is None:
-        match_results = rle_instance_matcher(gt_masks, pred_masks)
-    gt_masks = masks_to_bitmask_array(gt_masks)
-    pred_masks = masks_to_bitmask_array(pred_masks)
+        match_results = rle_instance_matcher(gt_masks, pred_masks, size=size)
+    gt_masks = masks_to_bitmask_array(gt_masks, size)
+    pred_masks = masks_to_bitmask_array(pred_masks, size)
 
     tp_idx = match_results['tp']
     matched_gt = gt_masks[tp_idx[:, 0]]
@@ -542,15 +561,13 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
     TP_mask_ = np.logical_and(matched_gt, matched_pred,)  # true positive
     FN_mask_ =  np.logical_and(matched_gt, np.logical_not(matched_pred))  # false negative
     FP_mask_ =  np.logical_and(np.logical_not(matched_gt), matched_pred)  # false positive
-    print(TP_mask_.shape)
-    
+
     project = lambda masks: np.logical_or.reduce(masks, axis=0)
 
     
     TP_reduced = project(TP_mask_).astype(np.uint)
     FN_reduced = project(FN_mask_).astype(np.uint) * 2
     FP_reduced = project(FP_mask_).astype(np.uint) * 4
-    print(TP_reduced.shape)
     # Code | TP   FN   FP 
     #------+-------------
     # 0    |  F    F   F
@@ -568,9 +585,7 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
         masks[:,:,i-1] = pixel_map == i
 
     masks = np.asfortranarray(masks)#.transpose((0,1,2)))
-    print(masks.shape)
     masks = RLE.encode(masks)
-    print(len(masks))
     masks = RLEMasks(masks)
 
     # maps index to colors
@@ -597,3 +612,38 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None):
                                                                   'boxes': np.zeros((len(masks), 4))})
 
     return i, colors[1]
+
+
+def RLE_numpy_encode(mask):
+    """
+    Encodes RLE with numpy arrays. Can accomodate bitmasks (boolean array)
+    or label images (integer array where 0 indicates no mask, and after 0 each integer
+    indicates a unique, separate mask)
+
+    Args:
+        mask: bitmask or label image
+
+    Returns:
+    """
+    if mask.dtype == np.bool:
+        assert mask.ndim == (2 or 3)
+    else:
+        assert mask.squeeze().ndim < 3
+
+    r0 = np.reshape(mask, mask.size)
+    r1 = np.where(r0[:-1] != r0[1:])[0]
+    r2 = r1[1:] - r1[:-1]
+
+    last = np.array([mask.size - r1[-1] - 1])
+
+    if r1[0] != 0:
+        first = np.array([0, r1[0] + 1])
+    else:
+        first = np.array([r1[0] + 1])
+
+    np_RLE = np.concatenate((first, r2, last), axis=0)
+    values = r0[r1]
+    values = values[values != 0]
+    results = {'size': mask.shape,  # TODO this doesn't work for bitmasks
+               'encoding': np_RLE,
+               'values': values}  # TODO debug values

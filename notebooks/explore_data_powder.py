@@ -1,10 +1,11 @@
 ##### Module imports
-gui = False
-if not gui:
-    # make sure script doesn't break on non-gui jobs 
-    # (ie batch job on computing cluster)
-    import matplotlib 
-    matplotlib.use('agg')
+import matplotlib
+gui = True
+if __name__ == '__main__':
+    if not gui:
+        # make sure script doesn't break on non-gui jobs
+        # (ie batch job on computing cluster)
+        matplotlib.use('agg')
 
 # regular module imports
 import cv2
@@ -15,22 +16,22 @@ import os
 import pathlib
 import pickle
 import skimage.io
+import sys
 
 ## detectron2
 from detectron2 import model_zoo
-from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import (
     DatasetCatalog,
     MetadataCatalog,
 )
-from detectron2.engine import DefaultTrainer, DefaultPredictor
-from detectron2.modeling import build_model
-from detectron2.solver import build_lr_scheduler, build_optimizer
+from detectron2.engine import DefaultPredictor
 from detectron2.structures import BoxMode
-from detectron2.utils.visualizer import Visualizer
 
-import data_utils
+ampis_root = pathlib.Path('../src/')
+sys.path.append(str(ampis_root))
+
+from ampis import data_utils
 
 # verify cuda is installed and running correctly
 import torch
@@ -77,6 +78,7 @@ def get_data_dicts(json_path):
         record["width"] = width
         record["dataset_class"] = v['file_attributes']['Image Class']
         record["mask_format"] = 'polygon'
+        record["HFW"] = v['file_attributes']['HFW']
         
         annos = v["regions"]
         objs = []
@@ -127,7 +129,7 @@ def split_data_dict(dataset_dicts, get_subset=None):
     """
     
     if get_subset is None:
-        get_subset = lambda x: x['dataset_class']
+        def get_subset(x): return x['dataset_class']
     
     
     subsets = np.unique([get_subset(x) for x in dataset_dicts])
@@ -164,8 +166,7 @@ def get_metadata(json_path):
 
     return metadata
 
-
-if __name__ == '__main__':
+def main():
     print(torch.cuda.is_available(), CUDA_HOME)
     EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
 
@@ -236,7 +237,7 @@ if __name__ == '__main__':
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset):
             print('visualizing gt instances for {}'.format(pathlib.Path(d['file_name']).relative_to('./')))
-            data_utils.quick_visualize_instances(d, gt_figure_root, dataset, suppress_labels=True)
+            data_utils.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
@@ -275,8 +276,8 @@ if __name__ == '__main__':
                 # overlay predicted masks on image
                 out = predictor(img)
                 outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
-                data_utils.quick_visualize_instances(out['instances'],
-                                                     outdir, dataset, gt=False, img_path=img_path)
+                data_utils.quick_visualize_ddicts(out['instances'],
+                                                  outdir, dataset, gt=False, img_path=img_path)
 
 
         pickle_out_path = pathlib.Path(outdir, 'outputs.pickle')
@@ -285,3 +286,9 @@ if __name__ == '__main__':
             pickle.dump(outputs, f)
         with open(pathlib.Path(outdir, 'outputs_np.pickle'), 'wb') as f:
             pickle.dump(outputs_np, f)
+
+
+
+
+if __name__ == '__main__':
+    main()

@@ -186,8 +186,8 @@ class instance_set(object):
         returns:
             * instances_filtered-instances object which only includes instances within given size thresholds
         """
-
         masks = self.instances.masks
+        masktype = type(masks)
         # determine which instances contain inlier masks
         areas = _mask_areas(masks)
 
@@ -210,8 +210,19 @@ class instance_set(object):
         #     temp = value[inliers_bool]
         #     new_instance_fields[key] = temp
 
-        new_instance_fields = {key: value[inliers_bool] for key, value
-                               in self.instances._fields.items()}
+        # can't iterate through polygonmasks properly, case must be handled separately
+        if masktype == PolygonMasks:
+            polygons = [p for p, b in zip(masks.polygons, inliers_bool) if b]
+            masks = PolygonMasks(polygons)
+        else:
+            masks = masks[inliers_bool]
+
+        new_instance_fields = {}
+        for key, value in self.instances._fields.items():
+            if key is 'masks':
+                new_instance_fields[key] = masks
+            else:
+                new_instance_fields[key] = value[inliers_bool]
 
         instances_filtered = Instances(self.instances.image_size,
                                        **new_instance_fields)
@@ -274,7 +285,9 @@ def _mask_areas(masks):
 
     elif masktype == PolygonMasks:
         # polygon masks given as array of coordinates [x0,y0,x1,y1,...xn,yn]
-        return np.asarray([_shoelace_area(coords[0][::2], coords[0][1::2]) for coords in masks.polygons])
+        area = np.asarray([_shoelace_area(coords[0][::2], coords[0][1::2]) for coords in masks.polygons])
+        return area
+
     elif masktype == list and type(masks[0]) == dict:
         # RLE encoded masks
         return RLE.area(masks)
