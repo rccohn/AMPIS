@@ -9,8 +9,11 @@ import torch
 from typing import List, Union
 
 from detectron2.structures import Boxes, BitMasks, PolygonMasks, Instances
+from pycocotools import mask as RLE
+from skimage.draw import polygon2mask
 
 from . import structures, visualize
+
 
 
 
@@ -246,10 +249,10 @@ class instance_set(object):
 
         if keys is None:  # use default values
             keys = ['area', 'equivalent_diameter', 'major_axis_length', 'perimeter', 'solidity', 'orientation']
-        rprops = [skimage.measure.regionprops_table(mask.astype(np.int), properties=keys)
-                  for mask in np.transpose(self.masks, (2, 0, 1))]
+        rprops = [skimage.measure.regionprops_table(masks_to_bitmask_array(mask, self.instances.image_size).squeeze()
+                                                    .astype(np.int), properties=keys) for mask in self.instances.masks]
         df = pd.DataFrame(rprops)
-        df['class_idx'] = self.class_idx
+        df['class_idx'] = self.instances.class_idx
         self.rprops = df
 
         if return_df:
@@ -311,4 +314,96 @@ def _shoelace_area(x, y):
     return area
 
 
+def masks_to_rle(masks, size=None):
+    """
 
+    Args:
+        masks:
+        size: only needed for polygonmasks- tuple(r, c) r, c are height and width of image in pixels
+
+    Returns:
+
+    """
+    if type(masks) == list:
+        if type(masks[0]) == dict:
+            # assumed to already be in RLE format
+            return masks
+        elif type(masks[0]) == list:
+            raise(NotImplementedError('):'))
+
+    if type(masks) == RLEMasks:
+        rle = masks.masks
+        return rle
+
+    elif type(masks) == PolygonMasks:
+        assert size is not None
+        rle = [RLE.frPyObjects(p, *size)[0] for p in masks.polygons]
+
+        return rle
+        # for mask in masks:
+        #     cords = mask.polygon
+        #     polygon2mask()
+
+
+def _poly2mask(masks, size):
+    """
+    Helper function since polygon masks can be lists, arrays, or PolygonMask instances
+    Args:
+        masks:
+
+    Returns:
+
+    """
+    return np.stack([polygon2mask(  # stack along axis 0 to get (n x r x c)
+        size, np.stack((p[1::2],  # x coords
+                        p[0::2]),  # y coords
+                       axis=1))  # stack along axis 1 to get (n_p x 2)
+        for p in masks])  # for every polygon
+
+
+def masks_to_bitmask_array(masks, size=None):
+    """
+
+    Args:
+        masks:
+
+    Returns:
+
+    """
+    dtype = type(masks)
+
+
+    if dtype == np.ndarray:
+        # masks are already array
+        assert masks.dtype == np.bool
+        return masks
+
+    elif dtype == PolygonMasks:
+            polygons = [x[0] for x in masks.polygons]
+            bitmasks = _poly2mask(polygons, size)
+            return _poly2mask(polygons, size)
+
+
+
+
+    elif dtype == list:
+        if type(masks[0]) == dict:
+            # RLE masks
+            return RLE.decode(masks).transpose((2, 0, 1))
+        elif type(masks[0]) == list or type(masks[0]) == np.ndarray:
+            bitmasks = _poly2mask(masks, size)
+            return _poly2mask(masks, size)
+        else:
+            raise NotImplementedError
+
+
+    elif dtype == RLEMasks:
+        bitmask = RLE.decode(masks.masks)
+        if bitmask.ndim == 2:  # only 1 mask
+            return bitmask
+        else:  # multiple masks, reorder to (n_mask x r x c
+            return bitmask.transpose((2, 0, 1))
+
+
+    else:
+        raise NotImplementedError

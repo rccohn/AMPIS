@@ -1,13 +1,12 @@
 import numpy as np
 import pathlib
 import pycocotools.mask as RLE
-from skimage.draw import polygon2mask
 
-from detectron2.structures import Instances, PolygonMasks
-
+from detectron2.structures import Instances
 
 from . import data_utils
-from .structures import instance_set, RLEMasks
+from .structures import instance_set, RLEMasks, masks_to_rle, masks_to_bitmask_array
+
 
 def align_instance_sets(A, B):
     """
@@ -56,18 +55,6 @@ def project_masks(masks):
         labels[mask] = i
     
     return labels
-
-
-def convert_masks(masks):
-    """
-
-    Args:
-        masks:
-
-    Returns:
-
-    """
-    masktype = type(masks)
 
 
 def IOU(true_mask, predicted_mask):
@@ -215,73 +202,6 @@ def expand_masks(masks):
             pass # bitmasks =
 
     return bitmasks
-
-
-def masks_to_rle(masks, size=None):
-    """
-
-    Args:
-        masks:
-        size: only needed for polygonmasks- tuple(r, c) r, c are height and width of image in pixels
-
-    Returns:
-
-    """
-    if type(masks) == list:
-        if type(masks[0]) == dict:
-            # assumed to already be in RLE format
-            return masks
-        elif type(masks[0]) == list:
-            raise(NotImplementedError('):'))
-
-    if type(masks) == RLEMasks:
-        rle = masks.masks
-        return rle
-
-    elif type(masks) == PolygonMasks:
-        assert size is not None
-        rle = [RLE.frPyObjects(p, *size)[0] for p in masks.polygons]
-
-        return rle
-        # for mask in masks:
-        #     cords = mask.polygon
-        #     polygon2mask()
-
-def masks_to_bitmask_array(masks, size=None):
-    """
-
-    Args:
-        masks:
-
-    Returns:
-
-    """
-    dtype = type(masks)
-
-    if dtype == np.ndarray:
-        # masks are already array
-        return masks
-
-    elif dtype == list:
-        if type(masks[0]) == dict:
-            # RLE masks
-            return RLE.decode(masks).transpose((2, 0, 1))
-        elif type(masks[0]) == (list or np.ndarray):
-            raise NotImplementedError
-
-    elif dtype == RLEMasks:
-        return RLE.decode(masks.masks).transpose((2, 0, 1))
-
-    elif dtype == PolygonMasks:
-        # polygon mask
-        return np.stack([polygon2mask(  # stack along axis 0 to get (n x r x c)
-            size, np.stack((p[0][1::2],  # x coords
-                            p[0][0::2]),  # y coords
-                           axis=1))   # stack along axis 1 to get (n_p x 2)
-                        for p in masks.polygons])  # for every polygon
-
-    else:
-        raise NotImplementedError
 
 
 def _piecewise_iou(a, b, interval=80):

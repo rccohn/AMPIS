@@ -209,27 +209,27 @@ def combine_gt_pred(gt, pred):
     """
     pass
 
-def instances_to_numpy(gt, pred):
-    """
-    converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization
-    can be done in environments without CUDA.
-    :param pred: detectron2.structures.instances.Instances object, from generating predictions on data
-    returns:
-    pred_dict: Dictionary containing the following fields:
-    'boxes': n_mask x 4 array of boxes
-    'box_mode': string correspnding to detectron2 box mode
-    'masks': n_mask element list of RLE encoded masks
-    'mask_format': 'bitmask'
-    'class': n_mask element array of class ids
-    'scores': n_mask element array of confidence scores (from softmax)
-    """
-
-    pred_dict = {'boxes': pred.pred_boxes.tensor.to('cpu').numpy(),
-                 'masks': pred.pred_masks.to('cpu').numpy(),
-                 'class_idx': pred.pred_classes.to('cpu').numpy(),
-                 'scores': pred.scores.to('cpu').numpy(),
-                }
-    return pred_dict
+# def instances_to_numpy(gt, pred):
+#     """
+#     converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization
+#     can be done in environments without CUDA.
+#     :param pred: detectron2.structures.instances.Instances object, from generating predictions on data
+#     returns:
+#     pred_dict: Dictionary containing the following fields:
+#     'boxes': n_mask x 4 array of boxes
+#     'box_mode': string correspnding to detectron2 box mode
+#     'masks': n_mask element list of RLE encoded masks
+#     'mask_format': 'bitmask'
+#     'class': n_mask element array of class ids
+#     'scores': n_mask element array of confidence scores (from softmax)
+#     """
+#
+#     pred_dict = {'boxes': pred.pred_boxes.tensor.to('cpu').numpy(),
+#                  'masks': pred.pred_masks.to('cpu').numpy(),
+#                  'class_idx': pred.pred_classes.to('cpu').numpy(),
+#                  'scores': pred.scores.to('cpu').numpy(),
+#                 }
+#     return pred_dict
 
 def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
     """
