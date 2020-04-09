@@ -237,7 +237,7 @@ def _piecewise_iou(a, b, interval=80):
     return target
 
 
-def _piecewise_iou2(gt, pred, iou_thresh=0.5, interval=80):
+def _piecewise_rle_match(gt, pred, iou_thresh=0.5, interval=80):
     """
     helper function for computing iou since
     this function apparently can only handle a max of 80 x 80
@@ -259,19 +259,20 @@ def _piecewise_iou2(gt, pred, iou_thresh=0.5, interval=80):
     pred_matched = np.zeros(len(pred), np.bool)
     n_seg_pred = jmax // interval + int(jmax % interval > 0)
     for gt_idx, gt_mask in enumerate(gt):
-        IOU_max = 0
+        IOU_max = 0.
         IOU_argmax = -1
         for j in range(n_seg_pred):
-            j_int = interval * np.array([j, j+1], np.int)
-            pred_args = pred[j_int[0]:j_int[1]]
+            j0, j1 = interval * np.array([j, j+1], np.int)
+            pred_args = pred[j0:j1]
 
-            iou_scores_ = RLE.iou([gt_mask], pred, [False for _ in range(len(pred_args))])[0]
+            iou_scores_ = RLE.iou([gt_mask], pred_args, [False for _ in range(j1-j0)])[0]
             iou_amax_j = np.argmax(iou_scores_)
-            iou_max_j = iou_scores_[iou_amax_j]
+            iou_max_j = iou_scores_[iou_amax_j] # max is computed with index relative to subset of data
+
 
             if iou_max_j > IOU_max:
                 IOU_max = iou_max_j
-                IOU_argmax = iou_amax_j
+                IOU_argmax = iou_amax_j + j0  # offset by j0 so argmax is indexed to predictions instead of subset
 
 
         if IOU_max > iou_thresh:
@@ -315,16 +316,12 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5, size=None):
         }
 
 
-    TODO currently all masks are compared. If this is slow, see if you can optimize to
-        only search predicted masks that are close to ground truth masks
-        (maybe use bbox iou or another data structure to keep track of neighbors?)
-    TODO Clean up functions???
     """
 
     # convert masks if needed
     gt = masks_to_rle(gt, size)
     pred = masks_to_rle(pred, size)
-    return _piecewise_iou2(gt, pred, iou_thresh)
+    return _piecewise_rle_match(gt, pred, iou_thresh)
 
 
 def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):

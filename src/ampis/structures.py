@@ -162,7 +162,7 @@ class instance_set(object):
         self.mask_format = 'bitmask'  # model outs assumed to be RLE bitmasks
 
         self.filepath = outs['file_name']
-        self.dataset_type = outs['dataset'].split('_')[1]  # Training, Validation, etc
+        self.dataset_class = outs['dataset'].split('_')[1]  # Training, Validation, etc
 
         instances_pred = outs['pred']['instances']
 
@@ -177,7 +177,7 @@ class instance_set(object):
         if return_:
             return self
 
-    def filter_mask_size(self, min_thresh=100, max_thresh=100000):
+    def filter_mask_size(self, min_thresh=100, max_thresh=100000, to_rle=False):
         """
         Remove instances with mask areas outside of the interval (min_thresh, max_thresh.)
 
@@ -185,14 +185,17 @@ class instance_set(object):
         :param instances:- instances object
         :param min_thresh: int- minimum mask size threshold in pixels, default 100, or None to not use this criteria
         :param max_thresh: int- maximum mask size threshold in pixels, default 100000, or None to not use this criteria
-
+        :to_rle: bool- if True, all masks will be converted to RLE before measuring
+                        so the pixels can be counted directly
         returns:
             * instances_filtered-instances object which only includes instances within given size thresholds
         """
         masks = self.instances.masks
+        if to_rle:
+            masks = RLEMasks(masks_to_rle(masks, self.instances.image_size))
         masktype = type(masks)
         # determine which instances contain inlier masks
-        areas = _mask_areas(masks)
+        areas = mask_areas(masks)
 
         if min_thresh is None:
             inlier_min = np.ones(areas.shape, np.bool)
@@ -265,13 +268,15 @@ class instance_set(object):
         return copy.deepcopy(self)
 
 
-def _mask_areas(masks):
+def mask_areas(masks):
     """
     Computes area in pixels of each mask in masks
     Args:
         masks: bitmask, polygonmask, or array containing masks
 
     Returns: n_mask element array of mask areas
+
+    TODO is this limited to 80 elements like IOU scores?
 
     TODO Test this
         For RLE masks, look into coco api   mask.area
@@ -312,6 +317,27 @@ def _shoelace_area(x, y):
     """
     area = 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
     return area
+
+def boxes_to_array(boxes):
+    """
+    Helper function to convert any type of object representing bounding boxes to a n_box * 4 numpy array
+    Args:
+        boxes:
+
+    Returns:
+
+    """
+    dtype = type(boxes)
+
+    if dtype == np.ndarray:
+        return boxes
+
+    elif dtype == list:
+        assert len(boxes[0]) == 4
+        return np.asarray(boxes)
+
+    elif dtype == Boxes:
+        return boxes.tensor.to('cpu').numpy()
 
 
 def masks_to_rle(masks, size=None):
@@ -379,9 +405,10 @@ def masks_to_bitmask_array(masks, size=None):
         return masks
 
     elif dtype == PolygonMasks:
-            polygons = [x[0] for x in masks.polygons]
-            bitmasks = _poly2mask(polygons, size)
-            return _poly2mask(polygons, size)
+        assert size is not None
+        polygons = [x[0] for x in masks.polygons]
+        bitmasks = _poly2mask(polygons, size)
+        return _poly2mask(polygons, size)
 
 
 
@@ -389,8 +416,9 @@ def masks_to_bitmask_array(masks, size=None):
     elif dtype == list:
         if type(masks[0]) == dict:
             # RLE masks
-            return RLE.decode(masks).transpose((2, 0, 1))
+            return RLE.decode(masks).astype(np.bool).transpose((2, 0, 1))
         elif type(masks[0]) == list or type(masks[0]) == np.ndarray:
+            assert size is not None
             bitmasks = _poly2mask(masks, size)
             return _poly2mask(masks, size)
         else:
@@ -398,9 +426,9 @@ def masks_to_bitmask_array(masks, size=None):
 
 
     elif dtype == RLEMasks:
-        bitmask = RLE.decode(masks.masks)
+        bitmask = RLE.decode(masks.masks).astype(np.bool)
         if bitmask.ndim == 2:  # only 1 mask
-            return bitmask
+            return bitmask[np.newaxis,:,:]
         else:  # multiple masks, reorder to (n_mask x r x c
             return bitmask.transpose((2, 0, 1))
 
