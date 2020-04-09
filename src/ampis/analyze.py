@@ -564,3 +564,46 @@ def RLE_numpy_encode(mask):
     results = {'size': mask.shape,  # TODO this doesn't work for bitmasks
                'encoding': np_RLE,
                'values': values}  # TODO debug values
+
+    return results
+
+
+def ordinal_hist_distance(A, B, normalize=True):
+    """
+    Computes the ordinal distance between 2 histograms.
+    Normalizing allows for comparison of histograms with different numbers of samples.
+
+    The distance describes the number of moves required to transform one histogram into the other,
+    where a 'move' indicates shifting one sample to the next or previous bin.
+
+    The un-normalized distance describes the number of blocks moved * number of bins moved
+
+    The normalized distance describes the average number of bins moved for each block in the normalized histogram.
+
+    Reference: Cha, Srihari, On measuring the distance between histograms, Pattern Recognition 35 (2002) 1355-1370
+
+    Parameters:
+        A, B,: 1 dimensional numpy arrays of the histograms being compared
+        normalize: if True, the normalized distance will be computed.
+
+    Returns:
+        h_dist: int or float, distance measure between histograms A and B.
+    """
+
+    assert A.ndim == 1 and B.ndim == 1
+    assert len(A) == len(B)
+
+    if normalize:
+        nA = A.sum()
+        nB = B.sum()
+        N = nA * nB
+        A = nB * A
+        B = nA * B
+
+    h_dist = np.abs((A - B).cumsum().sum())
+
+    if normalize:
+        h_dist /= N
+
+    return h_dist
+
