@@ -1,22 +1,15 @@
-import cv2
 import datetime
 import logging
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
-import pathlib
 import pycocotools.mask as RLE
 import time
 import torch
 
-from detectron2.data import MetadataCatalog, DatasetMapper, build_detection_test_loader
+from detectron2.data import DatasetMapper, build_detection_test_loader
 from detectron2.engine.hooks import HookBase
 from detectron2.engine.defaults import DefaultTrainer
-from detectron2.structures import BoxMode
 import detectron2.utils.comm as comm
 from detectron2.utils.logger import log_every_n_seconds
-from detectron2.utils.visualizer import Visualizer
-
 
 
 ### HOOKS AND TRAINER NEEDED TO GET VALIDATION LOSS
@@ -188,89 +181,11 @@ def format_outputs(filename, dataset, pred):
         results- dictionary of outputs
     """
 
-    compress_pred(pred.instances)  # RLE encodes masks, converts tensors to numpy
+    compress_pred(pred['instances'])  # RLE encodes masks, converts tensors to numpy
     results = {'file_name': filename,
                'dataset': dataset,
                'pred': pred}
 
     return results
 
-
-def combine_gt_pred(gt, pred):
-    """
-    Groups gt instances with corresponding predictions from inference. Predicted masks
-    are compressed to RLE format for memory-efficient storage.
-    Args:
-        gt: ground truth data dict
-        pred: predicted outputs from model
-    Returns:
-
-
-    """
-    pass
-
-# def instances_to_numpy(gt, pred):
-#     """
-#     converts detectron2 instance object to dictionary of numpy arrays so that data processing and visualization
-#     can be done in environments without CUDA.
-#     :param pred: detectron2.structures.instances.Instances object, from generating predictions on data
-#     returns:
-#     pred_dict: Dictionary containing the following fields:
-#     'boxes': n_mask x 4 array of boxes
-#     'box_mode': string correspnding to detectron2 box mode
-#     'masks': n_mask element list of RLE encoded masks
-#     'mask_format': 'bitmask'
-#     'class': n_mask element array of class ids
-#     'scores': n_mask element array of confidence scores (from softmax)
-#     """
-#
-#     pred_dict = {'boxes': pred.pred_boxes.tensor.to('cpu').numpy(),
-#                  'masks': pred.pred_masks.to('cpu').numpy(),
-#                  'class_idx': pred.pred_classes.to('cpu').numpy(),
-#                  'scores': pred.scores.to('cpu').numpy(),
-#                 }
-#     return pred_dict
-
-def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
-    """
-    Args: Visualize gt instances and save masks overlaid on images in target directory
-        ddict:for ground truth- data dict containing masks, see output of get_ddicts()
-              for predictions- output['instances'] where output is generated from predictor
-        root: path to save figures
-        dataset: name data is registered to in datasetdict
-        gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
-            if False, visualizer.draw_instance_predictions is used for PREDICTED instances
-        img_path: if None, img_path is read from ddict (ground truth)
-        otherwise, it is a string or path to the image file
-        suppress_labels: if True, class names will not be shown on visualizer
-
-    """
-    if img_path is None:
-        img_path = pathlib.Path(ddict['file_name'])
-    img_path = pathlib.Path(img_path)
-
-    metadata = MetadataCatalog.get(dataset)
-    if suppress_labels:
-        metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
-
-    visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
-
-    if gt:  # TODO automatically detect gt vs pred?
-        vis = visualizer.draw_dataset_dict(ddict)
-        n = ddict['num_instances']
-    else:
-        vis = visualizer.draw_instance_predictions(ddict)
-        n = len(ddict)
-
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
-    ax.imshow(vis.get_image())
-    ax.axis('off')
-    ax.set_title('{}\n{}'.format(dataset, img_path.name))
-    fig.tight_layout()
-    fig_path = pathlib.Path(root, '{}-n={}\n{}.png'.format(dataset, n,
-                                                                     '{}'.format(img_path.stem)))
-    fig.savefig(fig_path, bbox_inches='tight')
-    if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
-        plt.show()
-    plt.close(fig)
 
