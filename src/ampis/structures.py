@@ -15,8 +15,6 @@ from skimage.draw import polygon2mask
 from . import structures, visualize
 
 
-
-
 class RLEMasks:
     """
     Class for adding RLE masks to Instances object
@@ -84,7 +82,7 @@ class instance_set(object):
         self.filepath = file_path  # file name or path of image
         self.dataset_class = dataset_class  # 'Training', 'Validation', 'Test', etc
         self.pred_or_gt = pred_or_gt  # 'gt' for ground truth, 'pred' for model prediction
-        self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units. ##TODO automatically read this
+        self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units.
         self.rprops = None  # region props, placeholder for self.compute_regionprops()
         self.instances = instances
         self.annotations = annotations
@@ -92,8 +90,6 @@ class instance_set(object):
             randomstate = np.random.randint(2 ** 32 - 1)
         self.randomstate = randomstate
         self.colors = None
-
-    ##TODO __repr__?
 
     def read_from_ddict(self, ddict, return_=False):
         """

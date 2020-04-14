@@ -7,7 +7,7 @@ import pathlib
 
 from detectron2.data import MetadataCatalog
 from detectron2.utils.visualizer import Visualizer
-
+from matplotlib import pyplot as plt
 
 from . import structures
 
@@ -18,6 +18,7 @@ def random_colors(N, seed, bright=True):  # controls randomstate for plotting co
     To get visually distinct colors, generate them in HSV space then
     convert to RGB.
     Taken from Matterport Mask R-CNN visualize
+
     """
 
     rs = np.random.RandomState(seed=seed)
@@ -33,16 +34,23 @@ def random_colors(N, seed, bright=True):  # controls randomstate for plotting co
 def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False, summary=True):
     """
     Visualize gt instances and save masks overlaid on images in target directory
+
     Args:
-        ddict:for ground truth- data dict containing masks, see output of get_ddicts()
-              for predictions- output['instances'] where output is generated from predictor
-        root: path to save figures
-        dataset: name data is registered to in datasetdict
-        gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
+        ddict: dict
+            for ground truth- data dict containing masks, see output of get_ddicts()
+            for predictions- output['instances'] where output is generated from predictor
+        root: str or path-like object
+            path to save figures
+        dataset: str
+            name data is registered to in datasetdict
+        gt: bool
+            if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
             if False, visualizer.draw_instance_predictions is used for PREDICTED instances
-        img_path: if None, img_path is read from ddict (ground truth)
-        otherwise, it is a string or path to the image file
-        suppress_labels: if True, class names will not be shown on visualizer
+        img_path: str or path-like object
+            if None, img_path is read from ddict (ground truth)
+            otherwise, it is a string or path to the image file
+        suppress_labels: bool
+            if True, class names will not be shown on visualizer
         summary: prints summary of the ddict to terminal
 
     """
@@ -76,8 +84,8 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
 
     if summary:
         summary_string = 'ddict info:\n\tpath: {}\n\tmask format: {}\n\tnum_instances: {}'.format(ddict['file_name'],
-                                                                                               ddict['mask_format'],
-                                                                                               n)
+                                                                                                  ddict['mask_format'],
+                                                                                                  n)
         print(summary_string)
 
 
@@ -153,3 +161,46 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
         ax.imshow(vis_img)
         ax.axis('off')
 
+
+def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
+    """
+    Args: Visualize gt instances and save masks overlaid on images in target directory
+        ddict:for ground truth- data dict containing masks, see output of get_ddicts()
+              for predictions- output['instances'] where output is generated from predictor
+        root: path to save figures
+        dataset: name data is registered to in datasetdict
+        gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
+            if False, visualizer.draw_instance_predictions is used for PREDICTED instances
+        img_path: if None, img_path is read from ddict (ground truth)
+        otherwise, it is a string or path to the image file
+        suppress_labels: if True, class names will not be shown on visualizer
+
+    """
+    if img_path is None:
+        img_path = pathlib.Path(ddict['file_name'])
+    img_path = pathlib.Path(img_path)
+
+    metadata = MetadataCatalog.get(dataset)
+    if suppress_labels:
+        metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
+
+    visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
+
+    if gt:  # TODO automatically detect gt vs pred?
+        vis = visualizer.draw_dataset_dict(ddict)
+        n = ddict['num_instances']
+    else:
+        vis = visualizer.draw_instance_predictions(ddict)
+        n = len(ddict)
+
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+    ax.imshow(vis.get_image())
+    ax.axis('off')
+    ax.set_title('{}\n{}'.format(dataset, img_path.name))
+    fig.tight_layout()
+    fig_path = pathlib.Path(root, '{}-n={}\n{}.png'.format(dataset, n,
+                                                                     '{}'.format(img_path.stem)))
+    fig.savefig(fig_path, bbox_inches='tight')
+    if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
+        plt.show()
+    plt.close(fig)
