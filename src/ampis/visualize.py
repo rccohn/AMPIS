@@ -76,16 +76,14 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
     ax.axis('off')
     ax.set_title('{}\n{}'.format(dataset, img_path.name))
     fig.tight_layout()
-    fig_path = pathlib.Path(root, '{}-n={}\n{}.png'.format(dataset, n, img_path.stem))
+    fig_path = pathlib.Path(root, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
     fig.savefig(fig_path, bbox_inches='tight')
     if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
         plt.show()
     plt.close(fig)
 
     if summary:
-        summary_string = 'ddict info:\n\tpath: {}\n\tmask format: {}\n\tnum_instances: {}'.format(ddict['file_name'],
-                                                                                                  ddict['mask_format'],
-                                                                                                  n)
+        summary_string = 'ddict info:\n\tpath: {}\n\tnum_instances: {}'.format(img_path, n)
         print(summary_string)
 
 

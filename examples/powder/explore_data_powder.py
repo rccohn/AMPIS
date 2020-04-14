@@ -263,7 +263,7 @@ def main():
 
     for p in checkpoint_paths:
         cfg.MODEL.WEIGHTS = os.path.join(p)
-        outdir = '../figures/masks/predictions/{}'.format(p.stem)
+        outdir = '{}/{}'.format(pred_figure_root, p.stem)
         os.makedirs(outdir, exist_ok=True)
         predictor = DefaultPredictor(cfg)
         outputs = {}  # outputs as detectron2 instances objects
