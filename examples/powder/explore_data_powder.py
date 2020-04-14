@@ -1,6 +1,6 @@
 ##### Module imports
 import matplotlib
-gui = True
+gui = False 
 if __name__ == '__main__':
     if not gui:
         # make sure script doesn't break on non-gui jobs
@@ -31,7 +31,7 @@ from detectron2.structures import BoxMode
 ampis_root = pathlib.Path('../../src/')
 sys.path.append(str(ampis_root))
 
-from ampis import data_utils
+from ampis import data_utils, visualize
 
 # verify cuda is installed and running correctly
 import torch
@@ -170,8 +170,8 @@ def main():
     print(torch.cuda.is_available(), CUDA_HOME)
     EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
 
-    json_dict = {'particles': '../data/raw/via_2.0.8/via_powder_particle_masks.json',
-                 'satellites': '../data/raw/via_2.0.8/via_satellite_masks.json'}
+    json_dict = {'particles': '../../data/raw/via_2.0.8/via_powder_particle_masks.json',
+                 'satellites': '../../data/raw/via_2.0.8/via_satellite_masks.json'}
 
 
     json_path = json_dict[EXPERIMENT_NAME]
@@ -201,7 +201,7 @@ def main():
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
-    cfg.SOLVER.CHECKPOINT_PERIOD = 1000  # save checkpoint (model weights) after this many iterations
+    cfg.SOLVER.CHECKPOINT_PERIOD = 250  # save checkpoint (model weights) after this many iterations
     #cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # model evaluation (different from loss)
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
@@ -209,14 +209,14 @@ def main():
     cfg.TEST.DETECTIONS_PER_IMAGE = 600  # maximum number of instances that will be detected by the model
 
     # Instead of training by epochs, detectron2 uses iterations. As far as I can tell, 1 iteration is a single instance.
-    cfg.SOLVER.MAX_ITER = 20000
+    cfg.SOLVER.MAX_ITER = 5000
 
     # If the weights are locally available, use those. Otherwise, download them from model zoo.
     # Needed when computer does not have network access/permission to download files.
-    weights_path = pathlib.Path('../', 'models', 'model_final_f10217.pkl')  # path where downloaded weights is stored
+    weights_path = pathlib.Path('../','../', 'models', 'model_final_f10217.pkl')  # path where downloaded weights is stored
     if weights_path.is_file():
         print('Weights found')
-        cfg.MODEL.WEIGHTS = '../models/model_final_f10217.pkl'
+        cfg.MODEL.WEIGHTS = str(weights_path) 
     else:
         weights_source = model_zoo.get_checkpoint_url(
             "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
@@ -237,7 +237,7 @@ def main():
     for dataset in dataset_names:
         for d in DatasetCatalog.get(dataset):
             print('visualizing gt instances for {}'.format(pathlib.Path(d['file_name']).relative_to('./')))
-            data_utils.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
+            visualize.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
@@ -276,7 +276,7 @@ def main():
                 # overlay predicted masks on image
                 out = predictor(img)
                 outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
-                data_utils.quick_visualize_ddicts(out['instances'],
+                visualize.quick_visualize_ddicts(out['instances'],
                                                   outdir, dataset, gt=False, img_path=img_path)
 
 
