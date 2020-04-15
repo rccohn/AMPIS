@@ -1,5 +1,5 @@
 ##### Module imports
-gui = True
+gui = False
 import matplotlib
 if not gui:
     # make sure script doesn't break on non-gui jobs 
@@ -163,7 +163,7 @@ def get_metadata():
 def main():
     print(torch.cuda.is_available(), CUDA_HOME)
 
-    pickle_path = pathlib.Path('..', 'data', 'raw', 'spheroidite-images', 'spheroidite-files.pickle')
+    pickle_path = pathlib.Path('..','..', 'data', 'raw', 'spheroidite-images', 'spheroidite-files.pickle')
     assert pickle_path.is_file()
     datasets_all = get_files(pickle_path, 2)
 
@@ -192,7 +192,7 @@ def main():
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
-    cfg.SOLVER.CHECKPOINT_PERIOD = 1000  # save checkpoint (model weights) after this many iterations
+    cfg.SOLVER.CHECKPOINT_PERIOD = 250  # save checkpoint (model weights) after this many iterations
     cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # validation loss will be computed at every checkpoint
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
@@ -200,14 +200,14 @@ def main():
     cfg.TEST.DETECTIONS_PER_IMAGE = 600  # maximum number of instances that will be detected by the model
 
     # Instead of training by epochs, detectron2 uses iterations. As far as I can tell, 1 iteration is a single instance.
-    cfg.SOLVER.MAX_ITER = 20000
+    cfg.SOLVER.MAX_ITER = 5000
 
     # If the weights are locally available, use those. Otherwise, download them from model zoo.
     # Needed when computer does not have network access/permission to download files.
-    weights_path = pathlib.Path('../', 'models', 'model_final_f10217.pkl')  # path where downloaded weights is stored
+    weights_path = pathlib.Path('../','../', 'models', 'model_final_f10217.pkl')  # path where downloaded weights is stored
     if weights_path.is_file():
         print('Weights found: {}'.format(weights_path.relative_to('./')))
-        cfg.MODEL.WEIGHTS = '../models/model_final_f10217.pkl'
+        cfg.MODEL.WEIGHTS = str(weights_path)
     else:
         weights_source = model_zoo.get_checkpoint_url(
             "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
@@ -234,7 +234,6 @@ def main():
     train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
     if train:
         trainer = data_utils.AmpisTrainer(cfg)
-        trainer.build_evaluator(cfg)
         trainer.resume_or_load(resume=False)
         print('training model')
         trainer.train()  # uncomment to retrain model
@@ -247,7 +246,7 @@ def main():
 
     print('checkpoint paths found:\n\t{}'.format('\n\t'.join([x.name for x in checkpoint_paths])))
 
-    last_only = True
+    last_only = False
     if last_only:
         checkpoint_paths = checkpoint_paths[-1:]
 
@@ -270,7 +269,7 @@ def main():
                 # overlay predicted masks on image
                 out = predictor(img)
                 outputs[img_path.name] = data_utils.format_outputs(img_path.name, dataset, out)
-                data_utils.quick_visualize_ddicts(out['instances'],
+                visualize.quick_visualize_ddicts(out['instances'],
                                                   outdir, dataset, gt=False, img_path=img_path)
 
         pickle_out_path = pathlib.Path(outdir, 'outputs.pickle')
@@ -281,3 +280,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -168,7 +168,7 @@ def get_metadata(json_path):
 
 def main():
     print(torch.cuda.is_available(), CUDA_HOME)
-    EXPERIMENT_NAME = 'particles' # can be 'particles' or 'satellites'
+    EXPERIMENT_NAME = 'satellites' # can be 'particles' or 'satellites'
 
     json_dict = {'particles': '../../data/raw/via_2.0.8/via_powder_particle_masks.json',
                  'satellites': '../../data/raw/via_2.0.8/via_satellite_masks.json'}
@@ -240,7 +240,7 @@ def main():
             visualize.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
-    train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
+    train = False  # make True to retrain, False to skip training (ie when you only want to evaluate)
     if train:
         trainer = data_utils.AmpisTrainer(cfg)
         trainer.resume_or_load(resume=False)
@@ -256,7 +256,7 @@ def main():
 
     print('checkpoint paths found:\n\t{}'.format('\n\t'.join([x.name for x in checkpoint_paths])))
 
-    last_only = True  # if True, only view masks for final model.
+    last_only = False  # if True, only view masks for final model.
     #    Else, view predictions for all models.
     if last_only:
         checkpoint_paths = checkpoint_paths[-1:]
@@ -267,7 +267,6 @@ def main():
         os.makedirs(outdir, exist_ok=True)
         predictor = DefaultPredictor(cfg)
         outputs = {}  # outputs as detectron2 instances objects
-        outputs_np = {}  # outputs as numpy arrays
         for dataset in dataset_names:
             for d in DatasetCatalog.get(dataset):
                 img_path = pathlib.Path(d['file_name'])
@@ -284,8 +283,6 @@ def main():
         print('saving predictions to {}'.format(pickle_out_path))
         with open(pickle_out_path, 'wb') as f:
             pickle.dump(outputs, f)
-        with open(pathlib.Path(outdir, 'outputs_np.pickle'), 'wb') as f:
-            pickle.dump(outputs_np, f)
 
 
 
