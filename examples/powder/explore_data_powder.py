@@ -168,10 +168,11 @@ def get_metadata(json_path):
 
 def main():
     print(torch.cuda.is_available(), CUDA_HOME)
-    EXPERIMENT_NAME = 'satellites' # can be 'particles' or 'satellites'
+    EXPERIMENT_NAME = 'particles_2val' # can be 'particles' or 'satellites'
 
     json_dict = {'particles': '../../data/raw/via_2.0.8/via_powder_particle_masks.json',
-                 'satellites': '../../data/raw/via_2.0.8/via_satellite_masks.json'}
+                 'satellites': '../../data/raw/via_2.0.8/via_satellite_masks.json',
+'particles_2val': '../../data/raw/via_2.0.8/via_powder_particle_masks_2val.json'}
 
 
     json_path = json_dict[EXPERIMENT_NAME]
@@ -201,7 +202,7 @@ def main():
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
-    cfg.SOLVER.CHECKPOINT_PERIOD = 250  # save checkpoint (model weights) after this many iterations
+    cfg.SOLVER.CHECKPOINT_PERIOD = 240  # save checkpoint (model weights) after this many iterations
     #cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # model evaluation (different from loss)
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
@@ -240,7 +241,7 @@ def main():
             visualize.quick_visualize_ddicts(d, gt_figure_root, dataset, suppress_labels=True)
 
     # Train with model checkpointing
-    train = False  # make True to retrain, False to skip training (ie when you only want to evaluate)
+    train = True  # make True to retrain, False to skip training (ie when you only want to evaluate)
     if train:
         trainer = data_utils.AmpisTrainer(cfg)
         trainer.resume_or_load(resume=False)

@@ -31,6 +31,8 @@ class LossEvalHook(HookBase):
         start_time = time.perf_counter()
         total_compute_time = 0
         losses = []
+        metrics_dicts = []
+        valid_losses_all = []
         for idx, inputs in enumerate(self._data_loader):
             if idx == num_warmup:
                 start_time = time.perf_counter()
@@ -51,10 +53,18 @@ class LossEvalHook(HookBase):
                     ),
                     n=5,
                 )
-            loss_batch = self._get_loss(inputs)
+            loss_batch, metrics_dict = self._get_loss(inputs)
             losses.append(loss_batch)
+            metrics_dicts.append(metrics_dict)
         mean_loss = np.mean(losses)
+        
+        for md in metrics_dicts:
+            valid_losses_all.append(list(md.values()))
+        valid_losses_all = np.asarray(valid_losses_all).mean(axis=0)
+
         self.trainer.storage.put_scalar('validation_loss', mean_loss)
+        for k, v in zip(md.keys(), valid_losses_all):
+            self.trainer.storage.put_scalar('valid_'+k, v)
         comm.synchronize()
 
         return losses
@@ -67,7 +77,7 @@ class LossEvalHook(HookBase):
             for k, v in metrics_dict.items()
         }
         total_losses_reduced = sum(loss for loss in metrics_dict.values())
-        return total_losses_reduced
+        return total_losses_reduced, metrics_dict
 
     def after_step(self):
         next_iter = self.trainer.iter + 1

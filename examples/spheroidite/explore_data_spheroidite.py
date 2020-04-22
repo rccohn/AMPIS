@@ -1,11 +1,12 @@
 ##### Module imports
 gui = False
 import matplotlib
-if not gui:
+if __name__ == "__main__":
+    if not gui:
     # make sure script doesn't break on non-gui jobs 
     # (ie batch job on computing cluster)
     # for non gui, this needs to be set before pyplot or other libraries that use pyplot (ie seaborn, detectron visualizer, etc)
-    matplotlib.use('agg')
+        matplotlib.use('agg')
 
 # regular module imports
 import cv2
@@ -192,7 +193,7 @@ def main():
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
     cfg.SOLVER.IMS_PER_BATCH = 1  # Number of images per batch across all machines.
-    cfg.SOLVER.CHECKPOINT_PERIOD = 250  # save checkpoint (model weights) after this many iterations
+    cfg.SOLVER.CHECKPOINT_PERIOD = 240  # save checkpoint (model weights) after this many iterations
     cfg.TEST.EVAL_PERIOD = cfg.SOLVER.CHECKPOINT_PERIOD  # validation loss will be computed at every checkpoint
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (spheroidite)
