@@ -197,7 +197,7 @@ def main():
     cfg.merge_from_file(model_zoo.get_config_file(
         "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))  # use mask rcnn preset config
 
-    cfg.INPUT.MASK_FORMAT = 'bitmask'  # 'polygon' or 'bitmask'.
+    cfg.INPUT.MASK_FORMAT = 'polygon'  # 'polygon' or 'bitmask'.
     cfg.DATASETS.TRAIN = ("{}_Training".format(EXPERIMENT_NAME),)  # name of training dataset (must be registered)
     cfg.DATASETS.TEST = ("{}_Validation".format(EXPERIMENT_NAME),)  # name of test dataset (must be registered)
 
