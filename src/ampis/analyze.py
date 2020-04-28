@@ -343,6 +343,13 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
                         each matched pair of instances
       'mask_recall': n_match element array containing match recall for
                      each matched pair of instances
+      'match_tp' : n_match x 2 array of indices of the ground truth and predicted instances that were matched,
+      respectively. For example, match_tp[i] gives [gt_idx, pred_idx] for the i'th match.
+      'match_fn' : n_fn element array of unmatched ground-truth instances, which are false negatives
+      'match_fp' : n_fp element array of unmatched predicted instances, which are false positives
+      'mask_tp': n_match element array of true positive pixel counts for each matched mask
+      'mask_fn': n_match element array of false negative pixel counts for each matched gt mask
+      'mask_fp': n_match element array of of false postiive pixel counts for each matched pred mask}
     """
     ## match scoring
     gtmasks = masks_to_rle(gt, size)
@@ -374,7 +381,14 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
     return {'match_precision': match_precision,
            'match_recall': match_recall,
            'mask_precision': mask_precision,
-           'mask_recall': mask_recall}
+           'mask_recall': mask_recall,
+            'match_tp': matches_,
+            'match_fn': match_results_['fn'],
+            'match_fp': match_results_['fp'],
+            'mask_tp': mask_true_positive,
+            'mask_fn': mask_false_negative,
+            'mask_fp': mask_false_positive}
+
 
 # TODO move to visualize or rename?
 def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
