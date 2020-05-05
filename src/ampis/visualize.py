@@ -107,8 +107,6 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
     if colors is None:
         if iset.instances.has('colors'):
             colors = iset.instances.colors
-        else:
-            colors = None
 
     V = Visualizer(img, metadata, scale=1)
 
@@ -202,3 +200,89 @@ def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, supp
     if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
         plt.show()
     plt.close(fig)
+
+
+
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+
+## allows for adjusting box_alpha and linewidth of boxes, using a slightly modified
+# visualizer
+def quick_visualize_iset_custom(img, metadata, iset, show_class_idx=False, show_scores=False,
+                                ax=None, colors=None, return_visualizer=False):
+    """
+    visualize instance set
+    TODO finish docs
+    Args:
+        img:
+        metadata:
+        iset:
+        show_class_idx:
+        show_scores:
+        ax:
+        colors:
+
+    Returns:
+
+    """
+    from . import custom_visualizer as CV
+    # by default, colors will be extracted from instances. Otherwise, custom colors can be supplied.
+    if colors is None:
+        if iset.instances.has('colors'):
+            colors = iset.instances.colors
+        else:
+            colors = None
+
+    V = CV.Visualizer(img, metadata, scale=1)
+
+    if show_class_idx:
+
+        if show_scores:
+            extra = ': '
+        else:
+            extra = ''
+        class_idx = ['{}{}'.format(metadata['thing_classes'][idx], extra) for idx in iset.instances.class_idx]
+    else:
+        class_idx = ['' for x in range(len(iset.instances))]
+
+    if show_scores:
+        scores = ['{:.3f}'.format(x) for x in iset.instances.scores]
+    else:
+        scores = ['' for x in range(len(iset.instances))]  # gt do not have scores,
+        # so must iterate through a field that exists
+
+
+    labels = ['{}{}'.format(idx, score) for idx, score in zip(class_idx, scores)]
+
+    if iset.instances.has('masks'):
+        masktype = type(iset.instances.masks)
+        if masktype == structures.RLEMasks:
+            masks = iset.instances.masks.masks
+        else:
+            masks = iset.instances.masks
+    else:
+        masks=None
+
+    if iset.instances.has('boxes'):
+        boxes = iset.instances.boxes
+    else:
+        boxes = None
+
+    vis = V.overlay_instances(boxes=boxes, masks=masks, labels=labels,
+                              assigned_colors=colors)
+    vis_img = vis.get_image()
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10,7), dpi=150)
+        ax.imshow(vis_img)
+        ax.axis('off')
+        plt.show()
+
+    else:
+        ax.imshow(vis_img)
+        ax.axis('off')
+
+    if return_visualizer:
+        return vis_img

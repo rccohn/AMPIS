@@ -1,6 +1,7 @@
 import numpy as np
 import pathlib
 import pycocotools.mask as RLE
+import torch
 
 from detectron2.structures import Instances
 
@@ -84,9 +85,12 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     -1 and all other pixels have integer values corresponding to their index in the
     original r x c x n_masks arrays used to compute the label images.
     
-    Note that gt_masks and pred_masks must contain only instances from a single class. For multi-class instance segmentation, the instances can be divided into subsets based on their class labels. TODO make helper function to split instance.
+    Note that gt_masks and pred_masks must contain only instances from a single class. For multi-class instance
+    segmentation, the instances can be divided into subsets based on their class labels.
+    TODO make helper function to split instance.
     
-    Instances are matched on the basis of Intersection over Union (IOU,) or ratio of areas of overlap between 2 masks to the total area occupied by both masks.
+    Instances are matched on the basis of Intersection over Union (IOU,) or ratio of areas of overlap between
+    2 masks to the total area occupied by both masks.
     IOU (A,B) = sum(A & B)/sum(A | B)
     
     This should be much faster than brute-force matching, where IOU is computed for all
@@ -106,13 +110,15 @@ def fast_instance_match(gt_masks, pred_masks, gt_bbox=None, pred_bbox=None, IOU_
     returns:
       :param results: dictionary with the following structure:
         {
-        'gt_tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance for match i. The second element corresponds to the index of the pred index for match i.
+        'gt_tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance
+            for match i. The second element corresponds to the index of the pred index for match i.
         'gt_fn': n_fn element array where each element is a ground truth instance that was not matched (false negative)
         'pred_fp': n_fp element array where each element is a predicted instance that was not matched (false positive)
         'IOU_match': n_match element array of IOU scores for each match.
         }
     """
-    ## TODO consider using np.unique[r1:r2,c1:c2,:].max((0,1)) with indexing array instead of projecting instances onto 2d image to handle case of overlapping instances
+    ## TODO consider using np.unique[r1:r2,c1:c2,:].max((0,1)) with indexing array instead of projecting instances
+    # # onto 2d image to handle case of overlapping instances
     n = gt_masks.shape[2] # number of ground truth instances
     
     # get label images for each set of masks 
@@ -309,7 +315,8 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5, size=None):
     Returns:
         results: dictionary with the following structure:
         {
-        'tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance for match i. The second element corresponds to the index of the pred index for match i.
+        'tp': n_match x 2 array of indices of matches. The first element corresponds to the index of the gt instance
+        for match i. The second element corresponds to the index of the pred index for match i.
         'gt_fn': n_fn element array where each element is a ground truth instance that was not matched (false negative)
         'pred_fp': n_fp element array where each element is a predicted instance that was not matched (false positive)
         'IOU_match': n_match element array of IOU scores for each match.
@@ -326,7 +333,10 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5, size=None):
 
 def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
     """
-        Computes match and mask statistics for a give pair of masks (of the same class.) Match statistics describe the number of instances that were correctly matched with IOU above the threshold. Mask statistics describe how well the matched masks agree with each other. For each set of tests, the precision and recall are reported. 
+        Computes match and mask statistics for a give pair of masks (of the same class.) Match statistics describe
+        the number of instances that were correctly matched with IOU above the threshold.
+        Mask statistics describe how well the matched masks agree with each other. For each set of tests,
+        the precision and recall are reported.
     TODO update docs
     Inputs:
     :param gt: r x c x n_mask boolean array of ground truth masks
@@ -367,7 +377,8 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
 
     gtmasks_tp = [gtmasks[i[0]] for i in matches_]
     predmasks_tp = [predmasks[i[1]] for i in matches_]
-    mask_true_positive = np.array([RLE.area(RLE.merge([m1,m2], intersect=True)) for m1, m2 in zip(gtmasks_tp, predmasks_tp)],
+    mask_true_positive = np.array([RLE.area(RLE.merge([m1,m2], intersect=True))
+                                   for m1, m2 in zip(gtmasks_tp, predmasks_tp)],
                             np.int)
     tp_gt_area = np.array([RLE.area(m) for m in gtmasks_tp], np.int)
     tp_pred_area = np.array([RLE.area(m) for m in predmasks_tp], np.int)
@@ -390,24 +401,184 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
             'mask_fp': mask_false_positive}
 
 
+def merge_boxes(box1, box2):
+    """
+    Finds the smallest bounding box that fully encloses box1 and box2.
+
+
+    Boxes are of the form [r1, r2, c1, c2] (indices, not coordinates). The region of image *im* in the box
+    can be accessed by im[r1:r2,c1:c2].
+
+
+    Paramaters
+    -----------
+        box1, box2: ndarray
+            4-element array of the form [r1, r2, c1, c2], the indices of the
+            top left and bottom right corners of the box
+
+    Returns
+    ----------
+        bbox_merge: ndarray
+            4-element array containing the combined boxes.
+
+    Examples
+    -------
+
+
+    """
+    r11, r12, c11, c12 = box1
+    r21, r22, c21, c22 = box2
+
+    bbox_merge = np.array([min(r11, r21),  # min first row index
+                           max(r12, r22),  # max last row index
+                           min(c11, c21),  # min first col index
+                           max(c12, c22)])  # max last col index
+
+    return bbox_merge
+
+
+def _min_euclid(a, b):
+    """
+    Minimum euclidean distance in pixels from tensors *a* to pixels in tensor *b*.
+
+    Parameters
+    ------------
+    a: tensor
+        n x 2 tensor where each row corresponds to one set of (x,y) coords
+    b: tensor
+        m x 2 tensor where each row corresponds to one set of (x,y) coords
+
+    Returns
+    ---------
+    min_distances: tensor
+        n element tensor of minimum euclidean distances from elements in *a* to *b*.
+
+
+
+
+    Examples
+    --------------
+    TODO example
+    """
+
+    a = a.unsqueeze(axis=1)
+
+    square_diffs = torch.pow(a.double() - b.double(), 2)
+
+    distances = torch.sqrt(square_diffs.sum(axis=2))
+
+    min_distances = distances.min(axis=1)[0]
+
+    return min_distances
+
+
+def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches):
+    """
+    The purpose of this is to investigate the disagreement between the boundaries of predicted and ground truth masks.
+
+    For every matched pair of masks in pred and gt, determine false positive and false negative pixels.
+    For every false positive pixel, compute the distance to the nearest ground truth pixel.
+    For every false negative pixel, compute the distance to the nearest predicted pixel.
+
+    Parameters
+    -------------
+    gt_mask, pred_mask: list or RLEMasks
+        ground truth and predicted masks, RLE format
+    gt_box, pred_box: array
+        array of bbox coordinates
+    matches: array
+        n_match x 2 element array where matches[i] gives the index of the ground truth and predicted masks in
+        gt and pred corresponding to match i. This can be obtained from mask_match_stats (results['match_tp'])
+
+
+    Returns
+    -------------
+    FP_distances, FN_distances: list(torch.tensor)
+        List of results for each match in matches. Each element is a tensor containing the euclidean distances
+        (in pixels) from each false positive to its nearest ground truth pixel(FP_distances)
+        or the distance from each false negative to the nearest predicted pixel(FN_distances).
+    """
+
+    if torch.cuda.is_available():
+        device = 'cuda'
+    else:
+        device = 'cpu'
+
+    if type(gt_mask) == RLEMasks:
+        gt_mask = gt_mask.masks
+    if type(pred_mask) == RLEMasks:
+        pred_mask = pred_mask.masks
+
+    gt_masks = [gt_mask[i] for i in matches[:, 0]]
+    gt_boxes = [gt_box[i] for i in matches[:, 0]]
+
+    pred_masks = [pred_mask[i] for i in matches[:, 1]]
+    pred_boxes = [pred_box[i] for i in matches[:, 1]]
+
+
+    FP_distances = []
+    FN_distances = []
+    for gm, pm, gb, pb in zip(gt_masks, pred_masks, gt_boxes, pred_boxes):
+        # masks are same size as whole image, but we only need to look in the region containing the masks.
+        # combine the bboxes to get region containing both masks
+        r1, r2, c1, c2 = merge_boxes(gb, pb)
+
+        # decode RLE, select subset of masks included in box, and cast to torch tensor
+        gm = torch.tensor(RLE.decode(gm)[r1:r2, c1:c2], dtype=torch.bool).to(device)
+        pm = torch.tensor(RLE.decode(pm)[r1:r2, c1:c2], dtype=torch.bool).to(device)
+
+        # indices of pixels included in ground truth and predicted masks
+        gt_where = torch.stack(torch.where(gm), axis=1)
+        pred_where = torch.stack(torch.where(pm), axis=1)
+
+        # indices of false positive (pred and not gt) and false negative (gt and not pred) pixels
+        FP_where = torch.stack(torch.where(pm & torch.logical_not(gm)), axis=1)
+        FN_where = torch.stack(torch.where(gm & torch.logical_not(pm)), axis=1)
+
+        # distance from false positives to nearest ground truth pixels
+        if FP_where.numel():
+            FP_dist = _min_euclid(FP_where, gt_where)
+
+        else:
+            FP_dist = torch.tensor([], dtype=torch.double)
+
+        # distance from false negatives to nearest predicted pixels
+        if FN_where.numel():
+            FN_dist = _min_euclid(FN_where, pred_where)
+        else:
+            FN_dist = torch.tensor([], dtype=torch.double())
+
+        FP_distances.append(FP_dist)
+        FN_distances.append(FN_dist)
+
+    return FP_distances, FN_distances
+
+
 # TODO move to visualize or rename?
 def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
     """
-    Computes matches between gt and pred masks. Returns the masks, boxes, and colors in a format that is convenient for visualizing the match performance number of correctly matched instances.
+    Computes matches between gt and pred masks. Returns the masks, boxes, and colors in a format that
+    is convenient for visualizing the match performance number of correctly matched instances.
     inputs:
     TODO update documentation
     :param gt: r x c x n_mask_gt boolean array of ground truth masks
     :param pred: r x c x n_mask_pred boolean array of predicted masks
-    :param colormap: dictionary with keys 'TP', 'FP', 'FN'. The value corresponding to each key is a 1x3 float array of RGB color values.
-    If colormap is None, default colors will be used.
-    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
-    :param TP_gt: bool. If True, true positives will be displayed from ground truth instances. If False, true positives will be displayed from predicted instances.
-    If match_results is None, they will be computed using fast_instance_match().
+    :param colormap: dictionary with keys 'TP', 'FP', 'FN'. The value corresponding to each key is a
+        1x3 float array of RGB color values.
+        If colormap is None, default colors will be used.
+    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for
+        match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn'
+        for ground truth false negative indices.
+    :param TP_gt: bool. If True, true positives will be displayed from ground truth instances. If False,
+        true positives will be displayed from predicted instances.
+        If match_results is None, they will be computed using fast_instance_match().
     
     returns:
-    masks: r x c x n_mask_match boolean array containing true positive and false positive predicted masks, as well as false negative ground truth masks
+    masks: r x c x n_mask_match boolean array containing true positive and false positive predicted masks,
+        as well as false negative ground truth masks
     bbox: n_mask_match x 4 array of bbox coordinates for each mask in masks
-    colors: n_mask_match x 3 array of RGB colors for each mask. Colors can be used to visually distinguish true positives, false positives, and false negatives. 
+    colors: n_mask_match x 3 array of RGB colors for each mask. Colors can be used to visually distinguish true
+        positives, false positives, and false negatives.
     colormap: only returned if colormap=None. Returns the default colormap.
     """
     if match_results is None:
@@ -424,10 +595,11 @@ def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
         else pred.instances.boxes.tensor.numpy()
 
     #TODO pick prettier values!
+
     if colormap is None:  # default values
-        colormap = {'TP': np.asarray([1,0,0],np.float),
-                    'FP': np.asarray([0,1,0],np.float),
-                    'FN': np.asarray([0,0,1], np.float)}
+        colormap = {'TP': np.asarray([0.5,0.,1.],np.float),
+                    'FP': np.asarray([0.,1.,1.],np.float),
+                    'FN': np.asarray([1.,0.,0.], np.float)}
     
     if match_results is None:  # default
         match_results = fast_instance_match(gt_masks, pred_masks)
@@ -464,15 +636,22 @@ def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
         return i, colormap
     return i
 
+
 # TODO move to visualize or rename?
-def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None):
+def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None, mode='all'):
     """
-    Computes matches between gt and pred masks. Returns a mask image where each pixel describes if the pixel in the masks is a true positive false positive, false negative, or a combinaton of these.
+    Computes matches between gt and pred masks. Returns a mask image where each pixel describes if the pixel in the
+    masks is a true positive false positive, false negative, or a combinaton of these.
     inputs:
     :param gt_masks: r x c x n_mask_gt boolean array of ground truth masks
     :param pred_masks: r x c x n_mask_pred boolean array of predicted masks
-    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for ground truth false negative indices.
+    :param match_results: dictionary of match indices (see fast_instance_match()) with keys 'gt_tp' for match indices
+    (ground truth and predicted), 'pred_fp' for false positive predicted indices, and 'gt_fn' for
+    ground truth false negative indices.
     :param size: None if gt and pred are RLE masks, otherwise tuple (r, c) image height, image width
+    :mode: str 'all' will show each possible pixel classification (7 total,) 'reduced'
+                     will only show true positive, false positive, false negative, and 'other',
+                     where 'other' includes combinations from overlapping masks
     If match_results is None, they will be computed using fast_instance_match().
     
     returns:
@@ -493,13 +672,16 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None):
     FN_mask_ =  np.logical_and(matched_gt, np.logical_not(matched_pred))  # false negative
     FP_mask_ =  np.logical_and(np.logical_not(matched_gt), matched_pred)  # false positive
 
-    project = lambda masks: np.logical_or.reduce(masks, axis=0)
+
+    def project(masks_): return np.logical_or.reduce(masks_, axis=0)
 
     
     TP_reduced = project(TP_mask_).astype(np.uint)
     FN_reduced = project(FN_mask_).astype(np.uint) * 2
     FP_reduced = project(FP_mask_).astype(np.uint) * 4
-    # Code | TP   FN   FP 
+
+
+    # Code | TP   FN   FP
     #------+-------------
     # 0    |  F    F   F
     # 1    |  T    F   F
@@ -510,39 +692,59 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None):
     # 6    |  F    T   T
     # 7    |  T    T   T
     pixel_map = TP_reduced + FN_reduced + FP_reduced
-    
-    masks = np.zeros((*pixel_map.shape[:2], 7), np.bool)
-    for i in range(1,8):
-        masks[:,:,i-1] = pixel_map == i
 
-    masks = np.asfortranarray(masks)#.transpose((0,1,2)))
+    if mode == 'all':
+        masks = np.zeros((*pixel_map.shape[:2], 7), np.bool)
+        for i in range(1,8):
+            masks[:,:,i-1] = pixel_map == i
+
+        # maps index to colors
+        color_mapper = np.array([
+            [0., 0., 0.],
+            [0.153, 0.153, 0.000],
+            [0.286, 1., 0.],
+            [1., 0.857, 0.],
+            [1., 0., 0.],
+            [0., 0.571, 1.],
+            [0., 1., 0.571],
+            [0.285, 0., 1.]])
+
+        colors = [color_mapper[1:],
+                  ['Other', 'TP', 'FN', 'TP+FN', 'FP', 'TP+FP', 'FN+FP', 'TP+FN+FP']]
+
+    else:
+        masks = np.zeros((*pixel_map.shape[:2], 4), np.bool)
+        for i, idx in enumerate([1, 2, 4]):
+            masks[:, :, i] = pixel_map == idx  # idx for tp, fn, fp
+        # idx for pixels in multiple overlapping masks
+        masks[:, :, 3] = np.logical_or.reduce([pixel_map == i for i in [3, 5, 6, 7]], axis=0)
+            # color-blind friendly palette from https://venngage.com/blog/color-blind-friendly-palette/
+            # np.array([[169, 90, 161],[153, 153, 0],[15,32,128],[133, 192, 249]]) / 255
+        color_mapper = np.array([[0.5, 0., 1.],
+                                 [0., 1., 1.],
+                                 [1.,0.,0.],
+                                 [1., 1., 0.]])
+        colors = [color_mapper, ['TP', 'FN', 'FP', 'other']]
+
+
+
+    masks = np.asfortranarray(masks)
     masks = RLE.encode(masks)
     masks = RLEMasks(masks)
 
-    # maps index to colors
-    color_mapper = np.array([
-       [0.   , 0.   , 0.   ],
-       [0.150, 0.   , 0.100],
-       [0.286, 1.   , 0.   ],
-       [1.   , 0.857, 0.   ],
-       [1.   , 0.   , 0.   ],
-       [0.   , 0.571, 1.   ],
-       [0.   , 1.   , 0.571],
-       [0.285, 0.   , 1.   ]])
-    
+
     #mask_img_ravel = color_mapper[pixel_map.ravel(),:]
     
     #mask_img = np.reshape(mask_img_ravel, pixel_map.shape)
     
-    colors = [color_mapper[1:], 
-              ['Other', 'TP','FN','TP+FN','FP','TP+FP','FN+FP','TP+FN+FP']]
+
     
 
     i = instance_set()
     i.instances = Instances(image_size=masks.masks[0]['size'], **{'masks': masks, 'colors': colors[0],
                                                                   'boxes': np.zeros((len(masks), 4))})
 
-    return i, colors[1]
+    return i, colors
 
 
 def RLE_numpy_encode(mask):
