@@ -721,8 +721,8 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None, mode='a
             # color-blind friendly palette from https://venngage.com/blog/color-blind-friendly-palette/
             # np.array([[169, 90, 161],[153, 153, 0],[15,32,128],[133, 192, 249]]) / 255
         color_mapper = np.array([[0.5, 0., 1.],
-                                 [0., 1., 1.],
                                  [1.,0.,0.],
+                                 [0., 1., 1.],
                                  [1., 1., 0.]])
         colors = [color_mapper, ['TP', 'FN', 'FP', 'other']]
 
