@@ -19,7 +19,7 @@ from detectron2 import model_zoo
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 
-ampis_root = pathlib.Path('../../../src/')
+ampis_root = Path('../../../src/')
 sys.path.append(str(ampis_root))
 
 from ampis.data_utils import format_output
