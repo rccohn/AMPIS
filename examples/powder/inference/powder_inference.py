@@ -22,7 +22,7 @@ from detectron2.engine import DefaultPredictor
 ampis_root = Path('../../../src/')
 sys.path.append(str(ampis_root))
 
-from ampis.data_utils import format_output
+from ampis.data_utils import format_outputs
 from ampis.visualize import quick_visualize_ddicts
 
 
@@ -105,8 +105,8 @@ def main():
 
         # compress the outputs to RLE and store results
         outputs[img_path.name] = {
-            'particles': format_output(particle_out, particle_dataset, particle_out),
-            'satellites': format_output(satellite_out, satellite_dataset, satellite_out)
+            'particles': format_outputs(particle_out, particle_dataset, particle_out),
+            'satellites': format_outputs(satellite_out, satellite_dataset, satellite_out)
         }
 
     # write results for all files to disk
