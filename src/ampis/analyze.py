@@ -360,6 +360,7 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
       'mask_tp': n_match element array of true positive pixel counts for each matched mask
       'mask_fn': n_match element array of false negative pixel counts for each matched gt mask
       'mask_fp': n_match element array of of false postiive pixel counts for each matched pred mask}
+      'match_tp_iou': n_match element array of IOU scores for each match
     """
     ## match scoring
     gtmasks = masks_to_rle(gt, size)
@@ -398,7 +399,8 @@ def mask_match_stats(gt, pred, IOU_thresh=0.5, size=None):
             'match_fp': match_results_['fp'],
             'mask_tp': mask_true_positive,
             'mask_fn': mask_false_negative,
-            'mask_fp': mask_false_positive}
+            'mask_fp': mask_false_positive,
+            'match_tp_iou': match_results_['iou']}
 
 
 def merge_boxes(box1, box2):
@@ -472,7 +474,7 @@ def _min_euclid(a, b):
     return min_distances
 
 
-def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches):
+def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, force_cpu=False):
     """
     The purpose of this is to investigate the disagreement between the boundaries of predicted and ground truth masks.
 
@@ -489,6 +491,8 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches):
     matches: array
         n_match x 2 element array where matches[i] gives the index of the ground truth and predicted masks in
         gt and pred corresponding to match i. This can be obtained from mask_match_stats (results['match_tp'])
+    force_cpu: bool
+        if True, prevents running computations on gpu. I added this because my gpu is too small which causes problems ):
 
 
     Returns
@@ -499,15 +503,15 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches):
         or the distance from each false negative to the nearest predicted pixel(FN_distances).
     """
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and not force_cpu:
         device = 'cuda'
     else:
         device = 'cpu'
 
     if type(gt_mask) == RLEMasks:
-        gt_mask = gt_mask.masks
+        gt_mask = gt_mask.rle
     if type(pred_mask) == RLEMasks:
-        pred_mask = pred_mask.masks
+        pred_mask = pred_mask.rle
 
     gt_masks = [gt_mask[i] for i in matches[:, 0]]
     gt_boxes = [gt_box[i] for i in matches[:, 0]]
@@ -546,7 +550,7 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches):
         if FN_where.numel():
             FN_dist = _min_euclid(FN_where, pred_where)
         else:
-            FN_dist = torch.tensor([], dtype=torch.double())
+            FN_dist = torch.tensor([], dtype=torch.double)
 
         FP_distances.append(FP_dist)
         FN_distances.append(FN_dist)
@@ -630,7 +634,7 @@ def match_visualizer(gt, pred, match_results=None, colormap=None, TP_gt=False):
     colors = np.concatenate((TP_colors, FP_colors, FN_colors), axis=0)
 
     i = instance_set()
-    i.instances = Instances(image_size=masks.masks[0]['size'], **{'masks': masks, 'boxes': bbox, 'colors': colors})
+    i.instances = Instances(image_size=masks.rle[0]['size'], **{'masks': masks, 'boxes': bbox, 'colors': colors})
 
     if return_colormap:
         return i, colormap
@@ -741,7 +745,7 @@ def mask_visualizer(gt_masks, pred_masks, match_results=None, size=None, mode='a
     
 
     i = instance_set()
-    i.instances = Instances(image_size=masks.masks[0]['size'], **{'masks': masks, 'colors': colors[0],
+    i.instances = Instances(image_size=masks.rle[0]['size'], **{'masks': masks, 'colors': colors[0],
                                                                   'boxes': np.zeros((len(masks), 4))})
 
     return i, colors

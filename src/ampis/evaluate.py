@@ -346,7 +346,7 @@ def filter_small_masks(pred, thresh=100):
     
     pred_filtered = {'masks' : pred['masks'][:,:,mask_filter_]}  # mask format is different so it is computed separately
     
-    for key in [x for x in pred.keys() if x is not 'masks']:  # compute rest of masks
+    for key in [x for x in pred.keys() if x != 'masks']:  # compute rest of masks
         pred_filtered[key] = pred[key][mask_filter_]
     
     return pred_filtered

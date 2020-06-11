@@ -4,52 +4,54 @@ import pandas as pd
 import pathlib
 import pycocotools.mask as RLE
 import skimage
+from skimage.draw import polygon2mask
 import skimage.measure
 import torch
 from typing import List, Union
 
 from detectron2.structures import Boxes, BitMasks, PolygonMasks, Instances
-from pycocotools import mask as RLE
-from skimage.draw import polygon2mask
 
 from . import structures, visualize
 
 
 class RLEMasks:
     """
-    Class for adding RLE masks to Instances object
+    Class for adding RLE masks to Instances object.
+    Supports advanced indexing (such as indexing with an array or another list).
+    This allows for selecting a subset of masks, which is not possible with the
+    standard list(dic) of RLE masks.
     """
-    def __init__(self, masks):
+    def __init__(self, rle):
         """
 
         Args:
-            masks: n element list(dic) of RLE encoded masks
+            rle: n element list(dic) of RLE encoded masks
         """
-        self.masks = masks
+        self.rle = rle
 
     def __getitem__(self, item: Union[int, slice, List[int], List[bool],
                                       torch.BoolTensor, np.ndarray]):
         idx_list = False
         if type(item) == int:
-            return RLEMasks(self.masks[item])
+            return RLEMasks(self.rle[item])
 
         elif type(item) == torch.BoolTensor:
-            return RLEMasks([mask for mask, bool_ in zip(self.masks, item) if bool_])
+            return RLEMasks([mask for mask, bool_ in zip(self.rle, item) if bool_])
 
         elif type(item) == np.ndarray:
             if item.dtype == np.bool:
                 assert item.shape[0] == len(self)
-                return RLEMasks([mask for mask, bool_ in zip(self.masks, item) if bool_])
+                return RLEMasks([mask for mask, bool_ in zip(self.rle, item) if bool_])
             else:
                 idx_list = True
 
         elif type(item) == slice:
-            return RLEMasks(self.masks[item])
+            return RLEMasks(self.rle[item])
 
         elif type(item) == list:
             if type(item[0]) == bool:
                 assert len(item) == len(self)
-                return RLEMasks([mask for mask, bool_ in zip(self.masks, item) if bool_])
+                return RLEMasks([mask for mask, bool_ in zip(self.rle, item) if bool_])
             else:
                 idx_list = True
 
@@ -58,13 +60,13 @@ class RLEMasks:
 
         if idx_list:
             # list, (tuple, array, tensor, etc) of integer indices
-            return RLEMasks([self.masks[idx] for idx in item])
+            return RLEMasks([self.rle[idx] for idx in item])
 
         else:
             raise("invalid indices")
 
     def __len__(self):
-        return(len(self.masks))
+        return(len(self.rle))
 
 
 class instance_set(object):
@@ -112,7 +114,7 @@ class instance_set(object):
         # instances_gt = annotations_to_instances(ddict['annotations'], image_size, self.mask_format)
 
         class_idx = np.asarray([anno['category_id'] for anno in ddict['annotations']], np.int)
-        bbox = Boxes([anno['bbox'] for anno in ddict['annotations']])
+        bbox = np.stack([anno['bbox'] for anno in ddict['annotations']])
         segs = [anno['segmentation'] for anno in ddict['annotations']]
         segtype = type(segs[0])
         if segtype == dict:
@@ -181,7 +183,7 @@ class instance_set(object):
         :param instances:- instances object
         :param min_thresh: int- minimum mask size threshold in pixels, default 100, or None to not use this criteria
         :param max_thresh: int- maximum mask size threshold in pixels, default 100000, or None to not use this criteria
-        :to_rle: bool- if True, all masks will be converted to RLE before measuring
+        :param to_rle: bool- if True, all masks will be converted to RLE before measuring
                         so the pixels can be counted directly
         returns:
             * instances_filtered-instances object which only includes instances within given size thresholds
@@ -221,14 +223,13 @@ class instance_set(object):
 
         new_instance_fields = {}
         for key, value in self.instances._fields.items():
-            if key is 'masks':
+            if key == 'masks':
                 new_instance_fields[key] = masks
             else:
                 new_instance_fields[key] = value[inliers_bool]
 
         instances_filtered = Instances(self.instances.image_size,
                                        **new_instance_fields)
-
         return instances_filtered
 
     # TODO decompress masks, this will not work in the current state
@@ -296,7 +297,7 @@ def mask_areas(masks):
         # RLE encoded masks
         return RLE.area(masks)
     elif masktype == RLEMasks:
-        return RLE.area(masks.masks)
+        return RLE.area(masks.rle)
 
 
 def _shoelace_area(x, y):
@@ -354,7 +355,7 @@ def masks_to_rle(masks, size=None):
             raise(NotImplementedError('):'))
 
     if type(masks) == RLEMasks:
-        rle = masks.masks
+        rle = masks.rle
         return rle
 
     elif type(masks) == PolygonMasks:
@@ -422,12 +423,11 @@ def masks_to_bitmask_array(masks, size=None):
 
 
     elif dtype == RLEMasks:
-        bitmask = RLE.decode(masks.masks).astype(np.bool)
+        bitmask = RLE.decode(masks.rle).astype(np.bool)
         if bitmask.ndim == 2:  # only 1 mask
             return bitmask[np.newaxis,:,:]
         else:  # multiple masks, reorder to (n_mask x r x c
             return bitmask.transpose((2, 0, 1))
-
 
     else:
         raise NotImplementedError

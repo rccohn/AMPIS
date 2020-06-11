@@ -78,7 +78,7 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
     fig.tight_layout()
     fig_path = pathlib.Path(root, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
     fig.savefig(fig_path, bbox_inches='tight')
-    if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
+    if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
         plt.show()
     plt.close(fig)
 
@@ -132,7 +132,7 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
     if iset.instances.has('masks'):
         masktype = type(iset.instances.masks)
         if masktype == structures.RLEMasks:
-            masks = iset.instances.masks.masks
+            masks = iset.instances.masks.rle
         else:
             masks = iset.instances.masks
     else:
@@ -197,7 +197,7 @@ def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, supp
     fig_path = pathlib.Path(root, '{}-n={}\n{}.png'.format(dataset, n,
                                                                      '{}'.format(img_path.stem)))
     fig.savefig(fig_path, bbox_inches='tight')
-    if matplotlib.get_backend() is not 'agg':  # if gui session is used, show images
+    if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
         plt.show()
     plt.close(fig)
 
@@ -259,7 +259,7 @@ def quick_visualize_iset_custom(img, metadata, iset, show_class_idx=False, show_
     if iset.instances.has('masks'):
         masktype = type(iset.instances.masks)
         if masktype == structures.RLEMasks:
-            masks = iset.instances.masks.masks
+            masks = iset.instances.masks.rle
         else:
             masks = iset.instances.masks
     else:
