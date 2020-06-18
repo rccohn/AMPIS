@@ -91,6 +91,7 @@ target/
 
 # Virtual environment files
 /ampis_venv/
+/ampis_env/
 
 # logs
 /logs/*.log
@@ -99,3 +100,5 @@ target/
 
 # figures
 # /figures/
+
+/src/ampis/custom_visualizer.py

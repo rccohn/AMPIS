@@ -1,30 +1,54 @@
+"""
+Contains functions for overlaying instance masks, boxes, and labels on an image for visual verification.
+Wraps methods in detectron2.visualizer.
+"""
 import colorsys
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import pathlib
+from pathlib import Path
 
 from detectron2.data import MetadataCatalog
 from detectron2.utils.visualizer import Visualizer
-from matplotlib import pyplot as plt
 
 from . import structures
 
 
-def random_colors(N, seed, bright=True):  # controls randomstate for plotting consistentcy
+def random_colors(n, seed, bright=True):  # controls randomstate for plotting consistentcy
     """
-    Generate random colors.
-    To get visually distinct colors, generate them in HSV space then
-    convert to RGB.
-    Taken from Matterport Mask R-CNN visualize
+    Generate random colors for mask visualization.
+
+    To get visually distinct colors, generate colors in HSV with uniformly distributed hue and then  convert to RGB.
+    Taken from Matterport Mask R-CNN visualize, but added seed to allow for reproducability.
+
+    Parameters
+    ----------
+    n: int
+        number of colors to generate
+
+    seed: None or int
+        seed used to control random number generater.
+        If None, a randomly generated seed will be used
+
+    bright: bool
+        if True, V=1 used in HSV space for colors. Otherwise, V=0.7.
+
+    Returns
+    ---------
+    colors: ndarray
+        n x 3 array of RGB pixel values
+
+    Examples
+    ----------
+    TODO quick example
 
     """
 
     rs = np.random.RandomState(seed=seed)
 
     brightness = 1.0 if bright else 0.7
-    hsv = [(i / N, 1, brightness) for i in range(N)]
+    hsv = [(i / n, 1, brightness) for i in range(n)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     rs.shuffle(colors)
     colors = np.asarray(colors)
@@ -33,30 +57,77 @@ def random_colors(N, seed, bright=True):  # controls randomstate for plotting co
 
 def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False, summary=True):
     """
-    Visualize gt instances and save masks overlaid on images in target directory
+    Visualize gt annotations overlaid on the image.
 
-    Args:
-        ddict: dict
-            for ground truth- data dict containing masks, see output of get_ddicts()
-            for predictions- output['instances'] where output is generated from predictor
-        root: str or path-like object
-            path to save figures
-        dataset: str
-            name data is registered to in datasetdict
-        gt: bool
-            if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
-            if False, visualizer.draw_instance_predictions is used for PREDICTED instances
-        img_path: str or path-like object
-            if None, img_path is read from ddict (ground truth)
-            otherwise, it is a string or path to the image file
-        suppress_labels: bool
-            if True, class names will not be shown on visualizer
-        summary: prints summary of the ddict to terminal
+    Displays the image in img_path. Overlays the bounding boxes and segmentation masks of each instance in the image.
+
+    Parameters
+    ----------
+    ddict: list(dict) or
+        for ground truth- data dict containing masks. The format of ddict is described below in notes.
+
+    root: str or path-like object
+        path to save figures
+
+    dataset: str
+        name data is registered to in datasetdict
+
+    gt: bool
+        if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
+        if False, visualizer.draw_instance_predictions is used for PREDICTED instances
+
+    img_path: str or path-like object
+        if None, img_path is read from ddict (ground truth)
+        otherwise, it is a string or path to the image file
+
+    suppress_labels: bool
+        if True, class names will not be shown on visualizer
+
+    summary: bool
+        If True, prints summary of the ddict to terminal
+
+    Returns
+    -------
+    None
+
+    Notes
+    -------
+    Ddict should have the following format:
+    {
+    'file_name': str or Path object
+                path to image corresponding to annotations
+    'mask_format': str
+                  'polygonmask' if segmentation masks are lists of XY coordinates, or
+                  'bitmask'  if segmentation masks are RLE encoded segmentation masks
+    'height': int
+            image height in pixels
+    'width': int
+            image width in pixels
+    'annotations': list(dic)
+                    list of annotations. See the annotation format below.
+    'num_instances': int
+                equal to len(annotations)- number of instances present in the image
+    }
+
+The dictionary format for the annotation dictionaries is as follows:
+    {
+    'category_id': int
+                    numeric class label for the instance.
+    'bbox_mode': detectron2.structures.BoxMode object
+                describes the format of the bounding box coordinates.
+                The default is BoxMode.XYXY_ABS.
+    'bbox':  list(int)
+            4-element list of bbox coordinates
+    'segmentation': list
+                    list containing:
+                      * a list of polygon coordinates (mask format is polygonmasks)
+                      * dictionaries  of RLE mask encodings (mask format is bitmasks)
+    }
 
     """
     if img_path is None:
-        img_path = pathlib.Path(ddict['file_name'])
-    img_path = pathlib.Path(img_path)
+        img_path = ddict['file_name']
+    img_path = Path(img_path)
 
     metadata = MetadataCatalog.get(dataset)
     if suppress_labels:
@@ -76,7 +147,7 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
     ax.axis('off')
     ax.set_title('{}\n{}'.format(dataset, img_path.name))
     fig.tight_layout()
-    fig_path = pathlib.Path(root, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
+    fig_path = Path(root, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
     fig.savefig(fig_path, bbox_inches='tight')
     if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
         plt.show()
@@ -89,6 +160,88 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
 
 def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=False, ax=None, colors=None):
     """
+    Visualize instances in *iset* overlaid on image *img*.
+
+    Displays the image and overlays the instances (masks, boxes, labels, etc.) If no axis object is provided to
+    *ax*, creates and displays the figure. Otherwise, visualization is plotted on *ax* in place.
+
+    Parameters
+    ----------
+    img: ndarray
+        r x c {x 3} array of pixel values. Can be grayscale (2 dimensions) or RGB (3 dimensions)
+
+    metadata: dict
+        contains metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
+        following structure:
+        {
+        'thing_classes': list
+            list of strings corresponding to integer indices of class labels.
+            For example, if the classes are 0 for 'particle' and 1 for 'satellite',
+            then metadata['thing_classes'] = ['particle','satellite']
+        }
+
+    iset: InstanceSet object
+        iset.instances, a detectron2 Instances object, is used to get the masks, boxes, class_ids, scores
+        that will be displayed on the visualization.
+
+    show_class_idx: bool
+        if True, displays the class label (metadata['thing_classes'][class_idx]) on each instance in the image
+        default: False
+
+    show_scores: bool
+        if True, displays the confidence scores (output from softmax) on each instance in the image.
+        default: False
+
+    ax: matplotlib axis object or None
+        If an axis is supplied, the visualization is displayed on the axis.
+        If ax is None, a new figure is created, and plt.show() is called for the visualization.
+
+    colors: ndarray or None
+        Colors for each instance to be displayed.
+        if colors is an ndarray, should be a n_mask x 3 array of colors for each mask.
+        if colors is None and iset.instances.colors is defined, these colors are used.
+        if colors is None and iset.instances.colors is not defined, colors are randomly assigned.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -------
+    Ddict should have the following format:
+    {
+    'file_name': str or Path object
+                path to image corresponding to annotations
+    'mask_format': str
+                  'polygonmask' if segmentation masks are lists of XY coordinates, or
+                  'bitmask'  if segmentation masks are RLE encoded segmentation masks
+    'height': int
+            image height in pixels
+    'width': int
+            image width in pixels
+    'annotations': list(dic)
+                    list of annotations. See the annotation format below.
+    'num_instances': int
+                equal to len(annotations)- number of instances present in the image
+    }
+
+The dictionary format for the annotation dictionaries is as follows:
+    {
+    'category_id': int
+                    numeric class label for the instance.
+    'bbox_mode': detectron2.structures.BoxMode object
+                describes the format of the bounding box coordinates.
+                The default is BoxMode.XYXY_ABS.
+    'bbox':  list(int)
+            4-element list of bbox coordinates
+    'segmentation': list
+                    list containing:
+                      * a list of polygon coordinates (mask format is polygonmasks)
+                      * dictionaries  of RLE mask encodings (mask format is bitmasks)
+    }
+
+
+
     visualize instance set
     TODO finish docs
     Args:
@@ -136,7 +289,7 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
         else:
             masks = iset.instances.masks
     else:
-        masks=None
+        masks = None
 
     if iset.instances.has('boxes'):
         boxes = iset.instances.boxes
@@ -157,49 +310,50 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
         ax.imshow(vis_img)
         ax.axis('off')
 
-
-def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
-    """
-    Args: Visualize gt instances and save masks overlaid on images in target directory
-        ddict:for ground truth- data dict containing masks, see output of get_ddicts()
-              for predictions- output['instances'] where output is generated from predictor
-        root: path to save figures
-        dataset: name data is registered to in datasetdict
-        gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
-            if False, visualizer.draw_instance_predictions is used for PREDICTED instances
-        img_path: if None, img_path is read from ddict (ground truth)
-        otherwise, it is a string or path to the image file
-        suppress_labels: if True, class names will not be shown on visualizer
-
-    """
-    if img_path is None:
-        img_path = pathlib.Path(ddict['file_name'])
-    img_path = pathlib.Path(img_path)
-
-    metadata = MetadataCatalog.get(dataset)
-    if suppress_labels:
-        metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
-
-    visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
-
-    if gt:  # TODO automatically detect gt vs pred?
-        vis = visualizer.draw_dataset_dict(ddict)
-        n = ddict['num_instances']
-    else:
-        vis = visualizer.draw_instance_predictions(ddict)
-        n = len(ddict)
-
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
-    ax.imshow(vis.get_image())
-    ax.axis('off')
-    ax.set_title('{}\n{}'.format(dataset, img_path.name))
-    fig.tight_layout()
-    fig_path = pathlib.Path(root, '{}-n={}\n{}.png'.format(dataset, n,
-                                                                     '{}'.format(img_path.stem)))
-    fig.savefig(fig_path, bbox_inches='tight')
-    if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
-        plt.show()
-    plt.close(fig)
+# TODO I'm pretty sure this is depreciated, if nothing breaks after this is commented out go ahead and remove.
+# def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
+#     """
+#
+#     Visualize gt instances and save
+#         ddict:for ground truth- data dict containing masks, see output of get_ddicts()
+#               for predictions- output['instances'] where output is generated from predictor
+#         root: path to save figures
+#         dataset: name data is registered to in datasetdict
+#         gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
+#             if False, visualizer.draw_instance_predictions is used for PREDICTED instances
+#         img_path: if None, img_path is read from ddict (ground truth)
+#         otherwise, it is a string or path to the image file
+#         suppress_labels: if True, class names will not be shown on visualizer
+#
+#     """
+#     if img_path is None:
+#         img_path = Path(ddict['file_name'])
+#     img_path = Path(img_path)
+#
+#     metadata = MetadataCatalog.get(dataset)
+#     if suppress_labels:
+#         metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
+#
+#     visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
+#
+#     if gt:  # TODO automatically detect gt vs pred?
+#         vis = visualizer.draw_dataset_dict(ddict)
+#         n = ddict['num_instances']
+#     else:
+#         vis = visualizer.draw_instance_predictions(ddict)
+#         n = len(ddict)
+#
+#     fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+#     ax.imshow(vis.get_image())
+#     ax.axis('off')
+#     ax.set_title('{}\n{}'.format(dataset, img_path.name))
+#     fig.tight_layout()
+#     fig_path = Path(root, '{}-n={}\n{}.png'.format(dataset, n,
+#                                                                      '{}'.format(img_path.stem)))
+#     fig.savefig(fig_path, bbox_inches='tight')
+#     if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
+#         plt.show()
+#     plt.close(fig)
 
 
 
@@ -213,19 +367,8 @@ def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, supp
 def quick_visualize_iset_custom(img, metadata, iset, show_class_idx=False, show_scores=False,
                                 ax=None, colors=None, return_visualizer=False):
     """
-    visualize instance set
-    TODO finish docs
-    Args:
-        img:
-        metadata:
-        iset:
-        show_class_idx:
-        show_scores:
-        ax:
-        colors:
-
-    Returns:
-
+    Similar to quick_visualize_iset, but with some extra control (used for generating specific publication figures.
+    Not needed for normal program use.)
     """
     from . import custom_visualizer as CV
     # by default, colors will be extracted from instances. Otherwise, custom colors can be supplied.

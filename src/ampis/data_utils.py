@@ -1,3 +1,7 @@
+"""
+Miscellaneous tools, mostly used for model training.
+Also provides the AmpisTrainer, which can get loss statistics on a validation set during training.
+"""
 import datetime
 import logging
 import numpy as np
@@ -12,18 +16,40 @@ import detectron2.utils.comm as comm
 from detectron2.utils.logger import log_every_n_seconds
 
 
-### HOOKS AND TRAINER NEEDED TO GET VALIDATION LOSS
+# HOOKS AND TRAINER NEEDED TO GET VALIDATION LOSS
 # adapted from
 # https://medium.com/@apofeniaco/
 # training-on-detectron2-with-a-validation-set-and-plot-loss-on-it-to-avoid-overfitting-6449418fbf4e
 # and https://gist.github.com/ortegatron/c0dad15e49c2b74de8bb09a5615d9f6b
 class LossEvalHook(HookBase):
+    """
+    Adds validation loss statistics to AmpisTrainer class during training.
+    """
     def __init__(self, eval_period, model, data_loader):
+        """
+        initializes LossEvalHook class
+
+        Parameters
+        ----------
+        eval_period: int
+            period on which to report validation metrics during training
+
+        model: detectron2 model
+            model that the hook is registered to
+
+        data_loader: detectron2 data loader
+            loads data in a format consistent with the model. See detectron2  documentation for more info.
+
+        """
+        super().__init__()
         self._model = model
         self._period = eval_period
         self._data_loader = data_loader
 
     def _do_loss_eval(self):
+        """
+        Computes the loss on the validation set during training.
+        """
         # Copying inference_on_dataset from evaluator.py
         total = len(self._data_loader)
         num_warmup = min(5, total - 1)
@@ -70,6 +96,9 @@ class LossEvalHook(HookBase):
         return losses
 
     def _get_loss(self, data):
+        """
+        Computes loss from training loop.
+        """
         # How loss is calculated on train_loop
         metrics_dict = self._model(data)
         metrics_dict = {
@@ -80,6 +109,9 @@ class LossEvalHook(HookBase):
         return total_losses_reduced, metrics_dict
 
     def after_step(self):
+        """
+        method needed for hook to be automatically executed after training iterations.
+        """
         next_iter = self.trainer.iter + 1
         is_final = next_iter == self.trainer.max_iter
         if is_final or (self._period > 0 and next_iter % self._period == 0):
@@ -88,13 +120,37 @@ class LossEvalHook(HookBase):
 
 
 class AmpisTrainer(DefaultTrainer):
+    """
+    Extents detectron2 DefaultTrainer with validation loss metrics during training.
+
+    If you do not have a validation set or do not need the validation metrics during training,
+    just use the DefaultTrainer class.
+
+    """
     def __init__(self, cfg, val_dataset=None):
+        """
+        initializes the trainer
+
+        Parameters
+        ----------
+        cfg: detectron2 config
+            configuration contains settings for the trainer
+
+        val_dataset: str or None
+            Name of validation dataset used. If None, dataset will be pulled from cfg.DATASETS.TEST[0]
+
+        """
+
         if val_dataset is None:
             val_dataset = cfg.DATASETS.TEST[0]
         super().__init__(cfg)
         self.val_dataset = val_dataset
 
     def build_hooks(self):
+        """
+        Adds hooks to the trainer. This is needed to get the validation loss during training.
+
+        """
         hooks = super().build_hooks()
         hooks.insert(-1, LossEvalHook(
             self.cfg.SOLVER.CHECKPOINT_PERIOD,
@@ -107,19 +163,37 @@ class AmpisTrainer(DefaultTrainer):
         ))
         return hooks
 
+
 def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
     """
-    Extracts bounding boxes from boolean masks. Can be formatted for use with
-    either  detectron2 (default) or the matterport visualizer.
-    Args:
-        masks: boolean array of masks. Can be 2 dimensions for 1 mask or 3 dimensions for array of masks.
-        mask shape specified by mask_mode.
-        mask_mode: if 'detectron2,' masks are shape n_mask x r x c. if 'matterport,' masks are r x c x n_masks.
-        box_mode: if 'detectron2', boxes will be returned in [x1,y1,x2,y2] floating point format. (XYXY_ABS box mode)
-        if 'matterport,' boxes will be returned in [y1,y2,x1,x2] integer format.
+    Extracts bounding boxes from boolean masks.
 
-    Returns:
-        boxes: n_mask x 4 array with dtype and order of elements specified by box_mode input.
+    For a boolean numpy array, bounding boxes are extracted from the min and max x and y coordinates containing
+    pixels in each mask. Masks and boxes can be formatted for use with either  detectron2 (default) or
+    the matterport visualizer.
+    Detectron2 formatting:
+        masks: n_mask x r x c boolean array
+        boxes: (x0,y0,x1,y1) floating point box coordinates
+    Matterport formatting:
+        masks: r x c x n_mask boolean array
+        boxes: [r1,r2,c1,c2] integer box indices
+
+    Parameters
+    ----------
+        masks: ndarray
+            boolean array of masks. Can be 2 dimensions for 1 mask or 3 dimensions for array of masks.
+        mask_mode: str
+            if 'detectron2,' masks are shape n_mask x r x c.
+            if 'matterport,' masks are r x c x n_masks.
+        box_mode: str
+            if 'detectron2', boxes will be returned in [x1,y1,x2,y2] floating point format. (XYXY_ABS box mode)
+            if 'matterport,' boxes will be returned in [y1,y2,x1,x2] integer format.
+
+    Returns
+    ---------
+        boxes: ndarray
+            n_mask x 4 array with bbox coordinates in the format and dtype and specified by box_mode.
+
     """
 
     if masks.ndim == 2:
@@ -163,13 +237,20 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
 
 def compress_pred(pred):
     """
-    Compresses predicted masks to RLE and converts outputs to numpy arrays. Results in
-    massively smaller
-    Args:
-        pred: outputs of detectron2 predictor
+    Compresses predicted masks to RLE and converts other outputs to numpy arrays.
+
+    Results in significantly smaller data structures that are easier to store and load into memory.
+
+    Parameters
+    -------
+    pred: detectron2 Instances
+        outputs that will be compressed.
  
-    Returns:
-        pred_compressed: pred with masks compressed to RLE format
+    Returns
+    -------
+    pred_compressed: detectron2 Instances
+        pred with masks compressed to RLE format and other outputs converted to numpy.
+
     """
     pred.pred_masks = [RLE.encode(np.asfortranarray(x.to('cpu').numpy())) for x in pred.pred_masks]
     pred.pred_boxes = pred.pred_boxes.tensor.to('cpu').numpy()
@@ -177,16 +258,25 @@ def compress_pred(pred):
     pred.pred_classes = pred.pred_classes.to('cpu').numpy()
     return pred
 
+
 def format_outputs(filename, dataset, pred):
     """
     Formats model outputs consistently to make analysis easier later
-    Args:
-        filename: path of image corresponding to outputs
-        dataset: 'train' 'test' 'validation' etc
-        pred: model outputs from detectron2 predictor
 
-    note that this function applies compress_pred() to pred, which modifies
-    the instance predictions in-place to drastically reduce the space they take up
+    Note that this function applies compress_pred() to pred, which modifies
+    the instance predictions in-place to drastically reduce the space they take up. See compress_pred() documentation
+    for more info.
+
+
+    Parameters
+    -----------
+    filename:path or str
+        path of image corresponding to outputs
+    dataset: str
+        'train' 'test' 'validation' etc that describes the class of the data
+    pred: detectron2 Instances
+        model outputs from detectron2 predictor.
+
     Returns:
         results- dictionary of outputs
     """
