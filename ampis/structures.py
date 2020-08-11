@@ -143,7 +143,7 @@ class InstanceSet(object):
     """
 
     def __init__(self, mask_format=None, bbox_mode=None, filepath=None, annotations=None, instances=None, img=None,
-                 dataset_class=None, pred_or_gt=None, HFW=None, randomstate=None):
+                 dataset_class=None, pred_or_gt=None, HFW=None, HFW_units=None, randomstate=None):
         """
         initializes the InstanceSet instance.
 
@@ -173,8 +173,11 @@ class InstanceSet(object):
         annotations: list(dic)
             contains the annotations for the image
 
-        HFW: str or None
-            Horizontal field width of *img.* Contains the value and units separated by a space, eg '100 um'
+        HFW: float or None
+            Horizontal field width of *img.*
+
+        HFW_units: str or None
+            units of length for HFW (ie 'um')
 
         randomstate: None or int
             if None, a random state is determined from a random integer.
@@ -202,7 +205,8 @@ class InstanceSet(object):
         self.filepath = filepath  # file name or path of image
         self.dataset_class = dataset_class  # 'Training', 'Validation', 'Test', etc
         self.pred_or_gt = pred_or_gt  # 'gt' for ground truth, 'pred' for model prediction
-        self.HFW = HFW  # Horizontal Field Width of image. Can be float or string with value and units.
+        self.HFW = HFW  # Horizontal Field Width of image, float.
+        self.HFW_units = HFW_units  # units associated with HFW, str.
         self.rprops = None  # region props, placeholder for self.compute_regionprops()
         self.instances = instances
         self.annotations = annotations
@@ -211,7 +215,7 @@ class InstanceSet(object):
         self.randomstate = randomstate
         self.colors = None
 
-    def read_from_ddict(self, ddict, return_=False):
+    def read_from_ddict(self, ddict, inplace=True):
         """
         Read ground-truth annotations from data dicts.
 
@@ -222,8 +226,9 @@ class InstanceSet(object):
         -----------
         ddict: list
             List of data dicts in format described below in Notes.
-        return_: bool
-            If True, the InstanceSet object is returned. Else, the object is modified in-place
+
+        inplace: bool
+            If True, the object is modified in-place. Else, the InstanceSet object is returned.
 
         Returns
         -----------
@@ -249,9 +254,12 @@ class InstanceSet(object):
             read from ddict['dataset_class'], describes if the image is in the training, validation,
             or test set.
 
-        HFW: str or None
-            string describing the horizontal field width of the image. Should contain a float, followed
-            by a space, and the units, eg "1054 um".
+        HFW: float or None
+            Horizontal field width of *img.*
+
+        HFW_units: str or None
+            units of length for HFW (ie 'um')
+
 
         Notes
         ------
@@ -322,12 +330,24 @@ class InstanceSet(object):
 
         # optional values- default to None if not in ddict
         self.dataset_class = ddict.get('dataset_class', None)
-        self.HFW = ddict.get('HFW', None)
-        if return_:
+        HFW = ddict.get('HFW', None)
+        HFW_units = None
+        if HFW is not None:
+            try:
+                HFW = float(HFW)
+            except ValueError:
+                split = HFW.split(' ')
+                if len(split) == 2:
+                    HFW = float(split[0])
+                    HFW_units = split[1]
+        self.HFW = HFW
+        self.HFW_units = HFW_units
+
+        if not inplace:
             return self
         return
 
-    def read_from_model_out(self, outs, return_=False):
+    def read_from_model_out(self, outs, inplace=True):
         """
         Read model predictions formatted with data_utils.format_outputs() function.
 
@@ -360,9 +380,9 @@ class InstanceSet(object):
 
             }
 
-        return_: bool
-            if True, the InstanceSet object is returned.
-            Otherwise, it is modified in place.
+        inplace: bool
+            if True, the InstanceSet object is modified in place.
+            Otherwise, the object is returned.
 
         Attributes
         -----------
@@ -387,7 +407,12 @@ class InstanceSet(object):
         self.mask_format = 'bitmask'  # model outs assumed to be RLE bitmasks
 
         self.filepath = outs['file_name']
-        self.dataset_class = outs['dataset'].split('_')[1]  # Training, Validation, etc
+        ## if dataset name contains '_', assume that last portion of name indicates dataset class (ie powder_Training)
+        split = outs['dataset'].split('_')
+        if len(split) > 1:
+            self.dataset_class = outs['dataset'].split('_')[-1]  # Training, Validation, etc
+        else:
+            self.dataset_class = outs['dataset']
 
         instances_pred = outs['pred']['instances']
 
@@ -399,7 +424,7 @@ class InstanceSet(object):
         self.instances = instances
         self.instances.colors = visualize.random_colors(len(self.instances), self.randomstate)
 
-        if return_:
+        if not inplace:
             return self
         return
 
@@ -553,7 +578,7 @@ def mask_areas(masks):
     Returns
     ----------
     areas: ndarray
-        n_mask element array where each element contains the area of the corresponding mask in masks
+        n_mask element array where each element contains the Farea of the corresponding mask in masks
 
 
     """
@@ -569,11 +594,23 @@ def mask_areas(masks):
         area = np.asarray([_shoelace_area(coords[0][::2], coords[0][1::2]) for coords in masks.polygons])
         return area
 
-    elif masktype == list and type(masks[0]) == dict:
-        # RLE encoded masks
+    elif masktype == list and type(masks[0]) == dict:  # RLE encoded masks
         return RLE.area(masks)
+
     elif masktype == RLEMasks:
         return RLE.area(masks.rle)
+
+    elif masktype == Instances:
+        return mask_areas(masks.masks)
+
+    elif masktype == InstanceSet:
+        return mask_areas(masks.instances)
+
+    elif masktype == list:  # assumed to be list of objects containing masks
+        return [mask_areas(x) for x in masks]
+
+    else:
+        raise NotImplementedError('Not implemented for type {}'.format(masktype))
 
 
 def _shoelace_area(x, y):
@@ -653,25 +690,34 @@ def masks_to_rle(masks, size=None):
         list of dictionaries with RLE encodings for each mask
 
     """
-    if type(masks) == list:
+    dtype = type(masks)
+    if dtype == list:
         if type(masks[0]) == dict:
             # assumed to already be in RLE format
             return masks
         elif type(masks[0]) == list:
             raise(NotImplementedError('):'))
 
-    if type(masks) == RLEMasks:
+    if dtype == RLEMasks:
         rle = masks.rle
         return rle
 
-    elif type(masks) == PolygonMasks:
+    elif dtype == PolygonMasks:
         assert size is not None
         rle = [RLE.frPyObjects(p, *size)[0] for p in masks.polygons]
-
         return rle
         # for mask in masks:
         #     cords = mask.polygon
-        #     polygon2mask()
+        #     polygon2mask
+    elif dtype == InstanceSet:
+        return masks_to_rle(masks.instances.masks, masks.instances.image_size)
+
+    elif dtype == Instances:
+        return masks_to_rle(masks.masks, masks.image_size)
+
+    else:
+        raise NotImplementedError('cannot convert mask type {} to RLE'
+                                  .format(masks))
 
 
 def _poly2mask(masks, size):
@@ -689,7 +735,6 @@ def _poly2mask(masks, size):
                        axis=1))  # stack along axis 1 to get (n_p x 2)
         for p in masks])  # for every polygon
 
-# TODO depreciated?
 def masks_to_bitmask_array(masks, size=None):
     """
     Converts various mask types to an n_mask x r x c boolean array of masks.
@@ -711,7 +756,6 @@ def masks_to_bitmask_array(masks, size=None):
 
     """
     dtype = type(masks)
-
 
     if dtype == np.ndarray:
         # masks are already array
@@ -741,6 +785,12 @@ def masks_to_bitmask_array(masks, size=None):
             return bitmask[np.newaxis,:,:]
         else:  # multiple masks, reorder to (n_mask x r x c
             return bitmask.transpose((2, 0, 1))
+
+    elif dtype == InstanceSet:
+        return masks_to_bitmask_array(masks.instances.masks, masks.instances.image_size)
+
+    elif dtype == Instances:
+        return masks_to_bitmask_array(masks.masks, masks.image_size)
 
     else:
         raise NotImplementedError

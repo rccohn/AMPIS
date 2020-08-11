@@ -55,7 +55,8 @@ def random_colors(n, seed, bright=True):  # controls randomstate for plotting co
     return colors
 
 
-def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False, summary=True):
+def quick_visualize_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
+                           suppress_labels=False, summary=True):
     """
     Visualize gt annotations overlaid on the image.
 
@@ -66,11 +67,16 @@ def quick_visualize_ddicts(ddict, root, dataset, gt=True, img_path=None, suppres
     ddict: list(dict) or
         for ground truth- data dict containing masks. The format of ddict is described below in notes.
 
-    root: str or path-like object
-        path to save figures
+    outpath: str or path-like object, or None
+        If None, figure is displayed with plt.show() and not written to disk
+        If string/path, this is the location where figure will be saved to
 
     dataset: str
-        name data is registered to in datasetdict
+        name of dataset, included in filename and figure title.
+        The dataset should be registered in both the DatasetCatalog and MetadataCatalog
+        for proper plotting.
+        (see detectron2 datasetcatalog for more info.)
+
 
     gt: bool
         if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
@@ -142,14 +148,15 @@ The dictionary format for the annotation dictionaries is as follows:
         vis = visualizer.draw_instance_predictions(ddict)
         n = len(ddict)  # TODO len(ddict['annotations?']) double check this
 
-    fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+    fig, ax = plt.subplots(figsize=(5, 3), dpi=300)
     ax.imshow(vis.get_image())
     ax.axis('off')
     ax.set_title('{}\n{}'.format(dataset, img_path.name))
     fig.tight_layout()
-    fig_path = Path(root, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
-    fig.savefig(fig_path, bbox_inches='tight')
-    if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
+    if outpath is not None:
+        fig_path = Path(outpath, '{}-n={}_{}.png'.format(dataset, n, img_path.stem))
+        fig.savefig(fig_path, bbox_inches='tight')
+    else:
         plt.show()
     plt.close(fig)
 
@@ -158,7 +165,8 @@ The dictionary format for the annotation dictionaries is as follows:
         print(summary_string)
 
 
-def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=False, ax=None, colors=None):
+def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=False, ax=None, colors=None,
+                         apply_correction=False):
     """
     Visualize instances in *iset* overlaid on image *img*.
 
@@ -171,6 +179,7 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
         r x c {x 3} array of pixel values. Can be grayscale (2 dimensions) or RGB (3 dimensions)
 
     metadata: dict
+        TODO change position and make default=None
         contains metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
         following structure:
         {
@@ -201,6 +210,13 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
         if colors is an ndarray, should be a n_mask x 3 array of colors for each mask.
         if colors is None and iset.instances.colors is defined, these colors are used.
         if colors is None and iset.instances.colors is not defined, colors are randomly assigned.
+
+    apply_correction: bool
+        The visualizer appears to fill in masks. Applying the mask correction forces hollow masks to
+        appear correctly. This is mostly used when displaying the results from analyze.mask_perf_iset().
+        In other cases, it is not needed.
+
+
 
     Returns
     -------
@@ -240,26 +256,15 @@ The dictionary format for the annotation dictionaries is as follows:
                       * dictionaries  of RLE mask encodings (mask format is bitmasks)
     }
 
-
-
-    visualize instance set
-    TODO finish docs
-    Args:
-        img:
-        metadata:
-        iset:
-        show_class_idx:
-        show_scores:
-        ax:
-        colors:
-
-    Returns:
-
     """
+
     # by default, colors will be extracted from instances. Otherwise, custom colors can be supplied.
     if colors is None:
         if iset.instances.has('colors'):
             colors = iset.instances.colors
+
+    if img.ndim == 2:
+        img = np.expand_dims(img, axis=2)
 
     V = Visualizer(img, metadata, scale=1)
 
@@ -300,6 +305,15 @@ The dictionary format for the annotation dictionaries is as follows:
                               assigned_colors=colors)
     vis_img = vis.get_image()
 
+    # detectron2 visualizer can fill in masks that are not completely full
+    # In some cases, we don't want this. Thus, we manually overwrite areas
+    # that are filled in with pixels from the original image.
+    if apply_correction:
+        bitmasks = structures.masks_to_bitmask_array(iset)
+        bitmasks_reduced = np.logical_or.reduce(bitmasks, axis=0)
+        mask_correction = np.logical_not(bitmasks_reduced)
+        vis_img[mask_correction] = img[mask_correction]
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(10,7), dpi=150)
         ax.imshow(vis_img)
@@ -311,13 +325,13 @@ The dictionary format for the annotation dictionaries is as follows:
         ax.axis('off')
 
 # TODO I'm pretty sure this is depreciated, if nothing breaks after this is commented out go ahead and remove.
-# def quick_visualize_instances(ddict, root, dataset, gt=True, img_path=None, suppress_labels=False):
+# def quick_visualize_instances(ddict, outpath, dataset, gt=True, img_path=None, suppress_labels=False):
 #     """
 #
 #     Visualize gt instances and save
 #         ddict:for ground truth- data dict containing masks, see output of get_ddicts()
 #               for predictions- output['instances'] where output is generated from predictor
-#         root: path to save figures
+#         outpath: path to save figures
 #         dataset: name data is registered to in datasetdict
 #         gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
 #             if False, visualizer.draw_instance_predictions is used for PREDICTED instances
@@ -348,7 +362,7 @@ The dictionary format for the annotation dictionaries is as follows:
 #     ax.axis('off')
 #     ax.set_title('{}\n{}'.format(dataset, img_path.name))
 #     fig.tight_layout()
-#     fig_path = Path(root, '{}-n={}\n{}.png'.format(dataset, n,
+#     fig_path = Path(outpath, '{}-n={}\n{}.png'.format(dataset, n,
 #                                                                      '{}'.format(img_path.stem)))
 #     fig.savefig(fig_path, bbox_inches='tight')
 #     if matplotlib.get_backend() != 'agg':  # if gui session is used, show images

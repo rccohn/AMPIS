@@ -34,7 +34,6 @@ def align_instance_sets(a, b):
             Lists of matched instance set objects with consistent order by filenames.
 
     """
-    # TODO make sure this works when type(a[0].filepath) == str
     # TODO examples in docstring
 
     bdict = {Path(item.filepath).name: item for item in b}
@@ -533,7 +532,7 @@ def match_perf_iset(gt, pred, match_results=None, colormap=None, tp_gt=False):
     return iset
 
 
-def mask_perf_iset(gt_masks, pred_masks, match_results=None, mode='all'):
+def mask_perf_iset(gt_masks, pred_masks, match_results=None, mode='reduced'):
     """
     Stores mask true positives, false positives, and false negatives in an instance set for visualization.
 
@@ -572,8 +571,8 @@ def mask_perf_iset(gt_masks, pred_masks, match_results=None, mode='all'):
     # defaults
     if match_results is None:
         match_results = rle_instance_matcher(gt_masks, pred_masks,)
-    gt_masks = masks_to_bitmask_array(gt_masks,)
-    pred_masks = masks_to_bitmask_array(pred_masks,)
+    gt_masks = masks_to_bitmask_array(gt_masks)
+    pred_masks = masks_to_bitmask_array(pred_masks)
 
     tp_idx = match_results['tp']
     matched_gt = gt_masks[tp_idx[:, 0]]
