@@ -360,7 +360,7 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
             file_annotations = list(Path(ann_root).glob('*{}*'.format(p.stem)))  # find corresponding annotation file
             n = len(file_annotations)
             assert n == 1, f'There must be exactly 1 annotation file for, {p.name}, but {n} were found'
-            ann_path = file_annotations[0].relative_to(ann_root)
+            ann_path = file_annotations[0].relative_to(cwd)
 
             ann = np.load(str(ann_path)) if ann_path.suffix == '.npy' else skimage.io.imread(str(ann_path))
             height, width = ann.shape[:2]
@@ -388,7 +388,7 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
                 annotations.append({'bbox': bbox,
                                     'bbox_mode': BoxMode.XYXY_ABS,
                                     'segmentation': mask,
-                                    'categroy_id': 0})
+                                    'category_id': 0})
 
             ddict['annotations'] = annotations
             ddict['num_instances'] = len(annotations)

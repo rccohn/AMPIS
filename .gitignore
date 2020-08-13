@@ -102,3 +102,6 @@ target/
 # /figures/
 
 /src/ampis/custom_visualizer.py
+/examples/powder/particle_output
+/examples/powder/satellite_output
+/examples/spheroidite/spheroidite_output

@@ -497,7 +497,6 @@ def satellite_measurements(psi, print_summary=True, output_dict=False):
     assert n_particles == sum([len(x.particles.instances) for x in psi])
     assert n_satellites_matched + n_satellites_unmatched == sum([len(x.satellites.instances) for x in psi])
 
-
     counts = counts.cumsum()/counts.sum()
 
     keys = ['n_images', 'n_particles', 'n_satellites', 'n_satellites_unmatched', 'n_satellited_particels',
