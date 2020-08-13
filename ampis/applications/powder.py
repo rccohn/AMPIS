@@ -16,13 +16,44 @@ from ..structures import boxes_to_array, mask_areas, masks_to_rle, InstanceSet
 
 def _rle_satellite_match(particles, satellites, match_thresh=0.5):
     """
-    TODO docs
-    Args:
-        particles:
-        satellites:
-        match_thresh:
+    Match satellites in an image to their corresponding particles.
 
-    Returns:
+    Convert particle and satellite masks to RLE format. For each satellite,
+    compute the intersection (fraction of satellite mask overlapping with particle mask)
+     score with all particle masks. If the maximum intersection is above *match_thresh*,
+     the satellite is considered to match with that particle. Otherwise, the satellite
+     is considered unmatched.
+
+
+    Parameters
+    -----------
+    particles, satellites: InstanceSet or Instances object
+        Contains the masks for the powder particles and satellites, respectively.
+    match_thresh: float
+        Float between 0 and 1. If intersection score for potential matches is not
+        above this threshold, then the satellite will not match with a particle.
+    Returns
+    ----------
+    results: dict
+        Dictionary containing the results in the following format:
+        {'satellite_matches': n_match x 2 array. satellite_matches[i]
+                              contains [satellite_idx, particle_idx],
+                              the integer indices of the satellite,
+                              and particle that the satellite matches with,
+                              respectively.
+         'satellites_unmatched': n_satellite_unmatched element array containing
+                                the indices of unmatched satellites.
+         'particles_unmatched': n_particles_unmatched element array containing
+                                the indices of unmatched particles.
+         'intersection_scores': n_match element array of intersection scores
+                                for each of the matches in satellite_matches.
+         'match_pairs': dictionary. Keys of the dictionary are integer indices of
+                        particles that matched with satellites. Values of the
+                        dictionary are lists of integer indices of satellites that
+                        the particle matched with. Note that a particle can match
+                        with multiple satellites, but satellites can only match
+                        with a single particle.
+         }
 
     """
 
@@ -104,7 +135,7 @@ class PowderSatelliteImage(object):
 
         See Also
         ---------
-        rle_satellite_match :
+        rle_satellite_match : match satellites to powder particles
 
         """
         self.matches = _rle_satellite_match(self.particles.instances,
@@ -112,16 +143,20 @@ class PowderSatelliteImage(object):
         
     def visualize_particle_with_satellites(self, p_idx, ax=None):
         """
-        visualize single particle with its associated satellites
+        Visualize single particle with its associated satellites.
+
+        Allows for visual verification of satellite matches. Displays
+        the particles and overlays particle/satellite masks. Does not
+        return any variables, but modifies *ax* in place, if passed.
 
         Parameters
         -----------
         p_idx: int
          index of particle mask to be plotted. Should be a key in self.matches['particle_satellite_match_idx']
 
-       ax:  matplotlib axis object
-            Axis on which to visualize results on. If None, new figure and axis will be created
-            and shown with plt.show().
+        ax:  matplotlib axis object
+             Axis on which to visualize results on. If None, new figure and axis will be created
+             and shown with plt.show().
        """
 
         particle_mask = self.particles.instances[[p_idx]]  # maintain shape
@@ -229,10 +264,6 @@ class PowderSatelliteImage(object):
     def copy(self):
         """
         Return copy of the PowderSatelliteImage object.
-
-        Parameters
-        -----------
-        None
 
         Returns
         ---------
