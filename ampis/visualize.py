@@ -136,7 +136,12 @@ The dictionary format for the annotation dictionaries is as follows:
     img_path = Path(img_path)
 
     if suppress_labels:
-        metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
+        if gt:
+            ids = [x['category_id'] for x in ddict['annotations']]
+        else:
+            ids = ddict['instances'].pred_classes
+        u = np.unique(ids)
+        metadata = {'thing_classes': ['' for x in u]}
     else:
         metadata = MetadataCatalog.get(dataset)
 
