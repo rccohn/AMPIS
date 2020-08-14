@@ -135,9 +135,10 @@ The dictionary format for the annotation dictionaries is as follows:
         img_path = ddict['file_name']
     img_path = Path(img_path)
 
-    metadata = MetadataCatalog.get(dataset)
     if suppress_labels:
         metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
+    else:
+        metadata = MetadataCatalog.get(dataset)
 
     visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
 
