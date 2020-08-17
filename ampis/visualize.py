@@ -1,6 +1,8 @@
+# Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
+# Licensed under the MIT License (see LICENSE for details)
+# Written by Ryan Cohn
 """
-Contains functions for overlaying instance masks, boxes, and labels on an image for visual verification.
-Wraps methods in detectron2.visualizer.
+Contains functions for visualizing images with segmentation masks overlaid.
 """
 import colorsys
 import cv2
@@ -55,8 +57,8 @@ def random_colors(n, seed, bright=True):  # controls randomstate for plotting co
     return colors
 
 
-def quick_visualize_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
-                           suppress_labels=False, summary=True):
+def visualize_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
+                     suppress_labels=False, summary=True):
     """
     Visualize gt annotations overlaid on the image.
 
@@ -151,8 +153,8 @@ The dictionary format for the annotation dictionaries is as follows:
         vis = visualizer.draw_dataset_dict(ddict)
         n = ddict['num_instances']
     else:
-        vis = visualizer.draw_instance_predictions(ddict)
-        n = len(ddict)  # TODO len(ddict['annotations?']) double check this
+        vis = visualizer.draw_instance_predictions(ddict['instances'])
+        n = len(ddict['instances'])
 
     fig, ax = plt.subplots(figsize=(5, 3), dpi=300)
     ax.imshow(vis.get_image())
@@ -171,8 +173,8 @@ The dictionary format for the annotation dictionaries is as follows:
         print(summary_string)
 
 
-def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=False, ax=None, colors=None,
-                         apply_correction=False):
+def visualize_iset(img, iset, metadata=None, show_class_idx=False, show_scores=False, ax=None, colors=None,
+                   apply_correction=False):
     """
     Visualize instances in *iset* overlaid on image *img*.
 
@@ -184,9 +186,13 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
     img: ndarray
         r x c {x 3} array of pixel values. Can be grayscale (2 dimensions) or RGB (3 dimensions)
 
-    metadata: dict
-        TODO change position and make default=None
-        contains metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
+    iset: InstanceSet object
+        iset.instances, a detectron2 Instances object, is used to get the masks, boxes, class_ids, scores
+        that will be displayed on the visualization.
+
+    metadata: dict or None
+        If None, metadata (ie string class labels) will not be shown on image. Else, metadata
+        contains the metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
         following structure:
         {
         'thing_classes': list
@@ -194,10 +200,6 @@ def quick_visualize_iset(img, metadata, iset, show_class_idx=False, show_scores=
             For example, if the classes are 0 for 'particle' and 1 for 'satellite',
             then metadata['thing_classes'] = ['particle','satellite']
         }
-
-    iset: InstanceSet object
-        iset.instances, a detectron2 Instances object, is used to get the masks, boxes, class_ids, scores
-        that will be displayed on the visualization.
 
     show_class_idx: bool
         if True, displays the class label (metadata['thing_classes'][class_idx]) on each instance in the image
@@ -329,123 +331,3 @@ The dictionary format for the annotation dictionaries is as follows:
     else:
         ax.imshow(vis_img)
         ax.axis('off')
-
-# TODO I'm pretty sure this is depreciated, if nothing breaks after this is commented out go ahead and remove.
-# def quick_visualize_instances(ddict, outpath, dataset, gt=True, img_path=None, suppress_labels=False):
-#     """
-#
-#     Visualize gt instances and save
-#         ddict:for ground truth- data dict containing masks, see output of get_ddicts()
-#               for predictions- output['instances'] where output is generated from predictor
-#         outpath: path to save figures
-#         dataset: name data is registered to in datasetdict
-#         gt: if True, visualizer.draw_dataset_dict() is used for GROUND TRUTH instances
-#             if False, visualizer.draw_instance_predictions is used for PREDICTED instances
-#         img_path: if None, img_path is read from ddict (ground truth)
-#         otherwise, it is a string or path to the image file
-#         suppress_labels: if True, class names will not be shown on visualizer
-#
-#     """
-#     if img_path is None:
-#         img_path = Path(ddict['file_name'])
-#     img_path = Path(img_path)
-#
-#     metadata = MetadataCatalog.get(dataset)
-#     if suppress_labels:
-#         metadata = {'thing_classes': ['' for x in metadata.thing_classes]}
-#
-#     visualizer = Visualizer(cv2.imread(str(img_path)), metadata=metadata, scale=1)
-#
-#     if gt:  # TODO automatically detect gt vs pred?
-#         vis = visualizer.draw_dataset_dict(ddict)
-#         n = ddict['num_instances']
-#     else:
-#         vis = visualizer.draw_instance_predictions(ddict)
-#         n = len(ddict)
-#
-#     fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
-#     ax.imshow(vis.get_image())
-#     ax.axis('off')
-#     ax.set_title('{}\n{}'.format(dataset, img_path.name))
-#     fig.tight_layout()
-#     fig_path = Path(outpath, '{}-n={}\n{}.png'.format(dataset, n,
-#                                                                      '{}'.format(img_path.stem)))
-#     fig.savefig(fig_path, bbox_inches='tight')
-#     if matplotlib.get_backend() != 'agg':  # if gui session is used, show images
-#         plt.show()
-#     plt.close(fig)
-
-
-
-####################################################################################
-####################################################################################
-####################################################################################
-####################################################################################
-
-## allows for adjusting box_alpha and linewidth of boxes, using a slightly modified
-# visualizer
-def quick_visualize_iset_custom(img, metadata, iset, show_class_idx=False, show_scores=False,
-                                ax=None, colors=None, return_visualizer=False):
-    """
-    Similar to quick_visualize_iset, but with some extra control (used for generating specific publication figures.
-    Not needed for normal program use.)
-    """
-    from . import custom_visualizer as CV
-    # by default, colors will be extracted from instances. Otherwise, custom colors can be supplied.
-    if colors is None:
-        if iset.instances.has('colors'):
-            colors = iset.instances.colors
-        else:
-            colors = None
-
-    V = CV.Visualizer(img, metadata, scale=1)
-
-    if show_class_idx:
-
-        if show_scores:
-            extra = ': '
-        else:
-            extra = ''
-        class_idx = ['{}{}'.format(metadata['thing_classes'][idx], extra) for idx in iset.instances.class_idx]
-    else:
-        class_idx = ['' for x in range(len(iset.instances))]
-
-    if show_scores:
-        scores = ['{:.3f}'.format(x) for x in iset.instances.scores]
-    else:
-        scores = ['' for x in range(len(iset.instances))]  # gt do not have scores,
-        # so must iterate through a field that exists
-
-
-    labels = ['{}{}'.format(idx, score) for idx, score in zip(class_idx, scores)]
-
-    if iset.instances.has('masks'):
-        masktype = type(iset.instances.masks)
-        if masktype == structures.RLEMasks:
-            masks = iset.instances.masks.rle
-        else:
-            masks = iset.instances.masks
-    else:
-        masks=None
-
-    if iset.instances.has('boxes'):
-        boxes = iset.instances.boxes
-    else:
-        boxes = None
-
-    vis = V.overlay_instances(boxes=boxes, masks=masks, labels=labels,
-                              assigned_colors=colors)
-    vis_img = vis.get_image()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10,7), dpi=150)
-        ax.imshow(vis_img)
-        ax.axis('off')
-        plt.show()
-
-    else:
-        ax.imshow(vis_img)
-        ax.axis('off')
-
-    if return_visualizer:
-        return vis_img

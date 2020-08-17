@@ -1,12 +1,16 @@
+# Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
+# Licensed under the MIT License (see LICENSE for details)
+# Written by Ryan Cohn
 """
 Provides tools mostly for analyzing and evaluating model predictions after training and inference have
-been run. Perhaps most importantly, gives tools for matching ground truth to predicted instances for
-the same image, and some methods to quantify the performance of the predictions.
+been run. Notably, gives tools for matching ground truth to predicted instances for
+the same image, and methods to quantify the performance of the predictions.
 """
 import numpy as np
 from pathlib import Path
 import pycocotools.mask as rle
 import torch
+import warnings
 
 from detectron2.structures import Instances
 
@@ -198,23 +202,25 @@ def rle_instance_matcher(gt, pred, iou_thresh=0.5, size=None):
     return _piecewise_rle_match(gt, pred, iou_thresh)
 
 
-def mask_match_scores(gt, pred, iou_thresh=0.5, size=None):
+def det_seg_scores(gt, pred, iou_thresh=0.5, size=None):
     """
-        Computes match and mask statistics for a give pair of sets of masks.
+    Computes detection and segmentation scores for a give pair of sets of masks.
 
-        Masks are matched on the basis of IOU score using rle_instance_matcher(). Then the scores
-        are computed on the results.
+    Masks are matched on the basis of IOU score using rle_instance_matcher(). Then the scores
+    are computed from the results. For each set of tests, the precision and recall are reported.
+    Precision is the ratio of true positives to true positives + false positives. Recall is the
+    ratio of true positives to true positives + false negatives.
 
-        Match scores describe the number of instances that were correctly
-        matched with IOU above the threshold. True positives are matched masks, false positives
-        are unmatched predicted masks, and false negatives are unmatched ground truth masks.
-        Mask statistics describe how well the matched masks agree with each other. In each matched pair of masks,
-        true positives are pixels included in both the ground truth masks, false positives are pixels only included
-        in the predicted mask, and false negatives are pixels only included in the ground truth mask.
+    Detection scores are calculated for the whole set of masks and  describe the number of
+    instances that were correctly matched with IOU above the threshold. True positives are
+     atched masks, false positives are unmatched predicted masks, and false negatives are
+     unmatched ground truth masks.
 
-        For each set of tests, the precision and recall are reported. Precision is the ratio of true positives
-        to true positives + false positives. Recall is the ratio of true positives to true positives + false negatives.
-
+    Segmentation scores are calculated for each matched pair of masks and  describe how well
+    the pair of masks agree with each other. In each matched pair of masks, true positives
+    are pixels included in both the ground truth masks, false positives are pixels only
+    included in the predicted mask, and false negatives are pixels only included in the
+    ground truth mask.
 
     Parameters
     ________________
@@ -231,60 +237,67 @@ def mask_match_scores(gt, pred, iou_thresh=0.5, size=None):
     ---------------
     output: dictionary
         Contains the following key:value pairs:
-          'match_precision': float between 0 and 1, match precision for instances
-          'match_recall': float between 0 and 1, match recall for instances
-          'mask_precision': n_match element array containing match precision for
-                            each matched pair of instances
-            'mask_recall': n_match element array containing match recall for
-                        each matched pair of instances
-            'match_tp' : n_match x 2 array of indices of the ground truth and predicted instances that were matched,
-                         respectively. For example, match_tp[i] gives [gt_idx, pred_idx] for the i'th match.
-            'match_fn' : n_fn element array of unmatched ground-truth instances, which are false negatives
-            'match_fp' : n_fp element array of unmatched predicted instances, which are false positives
-            'mask_tp': n_match element array of true positive pixel counts for each matched mask
-            'mask_fn': n_match element array of false negative pixel counts for each matched gt mask
-            'mask_fp': n_match element array of of false postiive pixel counts for each matched pred mask}
-            'match_tp_iou': n_match element array of IOU scores for each match
+          'det_precision': float between 0 and 1, detection precision for instances
+          'det_recall': float between 0 and 1, detection recall for instances
+          'seg_precision': n_match element array containing the segmentation precision scores
+                           for each matched pair of instances.
+            'seg_recall': n_match element array containing the segmentation recall scores
+                          for each matched pair of instances.
+            'det_tp' : n_match x 2 array of indices of the ground truth and predicted instances that were matched,
+                         respectively. For example, match_tp[i] gives [gt_idx, pred_idx] for the i'th detection match.
+            'det_fn' : n_fn element array of detection false negative masks.
+            'det_fp' : n_fp element array of detection false positive masks.
+            'seg_tp': n_match element array containing the total number of segmentation true positives
+                      for each matched pair of masks.
+            'seg_fn': n_match element array of containing the total number of segmentation false negatives
+                      for each matched pair of masks.
+            'seg_fp': n_match element array of containing the total number of segmentation false positives
+                      for each matched pair of masks.
+            'det_tp_iou': n_match element array of IOU scores for each detection true positive
     """
-    ## match scoring
+    # detection instance matching
     gtmasks = masks_to_rle(gt, size)
     predmasks = masks_to_rle(pred, size)
 
+    detection_results_ = rle_instance_matcher(gtmasks, predmasks, iou_thresh=iou_thresh, size=size)
+    matches_ = np.asarray(detection_results_['tp'])
 
-    match_results_ = rle_instance_matcher(gtmasks, predmasks, iou_thresh=iou_thresh, size=size)
-    matches_ = np.asarray(match_results_['tp'])
-    TP_match_ = len(matches_) #  true positive
-    FN_match_ = len(match_results_['fn']) #  false negative
-    FP_match_ = len(match_results_['fp']) #  false positive
+    # detection precision and recall
+    TP_det_ = len(matches_) #  true positive
+    FN_det_ = len(detection_results_['fn']) #  false negative
+    FP_det_ = len(detection_results_['fp']) #  false positive
 
-    match_precision = TP_match_ / (TP_match_ + FP_match_)
-    match_recall = TP_match_ / (TP_match_ + FN_match_)
+    det_precision = TP_det_ / (TP_det_ + FP_det_)
+    det_recall = TP_det_ / (TP_det_ + FN_det_)
 
+    # segmentation scores
     gtmasks_tp = [gtmasks[i[0]] for i in matches_]
     predmasks_tp = [predmasks[i[1]] for i in matches_]
-    mask_true_positive = np.array([rle.area(rle.merge([m1, m2], intersect=True))
-                                   for m1, m2 in zip(gtmasks_tp, predmasks_tp)],
-                            np.int)
+    seg_true_positive = np.array([rle.area(rle.merge([m1, m2], intersect=True))
+                                  for m1, m2 in zip(gtmasks_tp, predmasks_tp)],
+                                 np.int)
+
+    # total number of pixels in each gt and pred mask
     tp_gt_area = np.array([rle.area(m) for m in gtmasks_tp], np.int)
     tp_pred_area = np.array([rle.area(m) for m in predmasks_tp], np.int)
 
-    mask_false_positive = tp_pred_area - mask_true_positive
-    mask_false_negative = tp_gt_area - mask_true_positive
+    seg_false_positive = tp_pred_area - seg_true_positive
+    seg_false_negative = tp_gt_area - seg_true_positive
 
-    mask_precision = mask_true_positive /(mask_true_positive + mask_false_positive)
-    mask_recall = mask_true_positive /(mask_true_positive + mask_false_negative)
+    seg_precision = seg_true_positive / (seg_true_positive + seg_false_positive)
+    seg_recall = seg_true_positive / (seg_true_positive + seg_false_negative)
 
-    return {'match_precision': match_precision,
-           'match_recall': match_recall,
-           'mask_precision': mask_precision,
-           'mask_recall': mask_recall,
-            'match_tp': matches_,
-            'match_fn': match_results_['fn'],
-            'match_fp': match_results_['fp'],
-            'mask_tp': mask_true_positive,
-            'mask_fn': mask_false_negative,
-            'mask_fp': mask_false_positive,
-            'match_tp_iou': match_results_['iou']}
+    return {'det_precision': det_precision,
+           'det_recall': det_recall,
+           'seg_precision': seg_precision,
+           'seg_recall': seg_recall,
+            'det_tp': matches_,
+            'det_fn': detection_results_['fn'],
+            'det_fp': detection_results_['fp'],
+            'seg_tp': seg_true_positive,
+            'seg_fn': seg_false_negative,
+            'seg_fp': seg_false_positive,
+            'det_tp_iou': detection_results_['iou']}
 
 
 def merge_boxes(box1, box2):
@@ -361,7 +374,7 @@ def _min_euclid(a, b):
     return min_distances
 
 
-def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, force_cpu=False):
+def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, device='auto'):
     """
     Investigate the disagreement between the boundaries of predicted and ground truth masks.
 
@@ -378,8 +391,10 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, force_cpu=
     matches: array
         n_match x 2 element array where matches[i] gives the index of the ground truth and predicted masks in
         gt and pred corresponding to match i. This can be obtained from mask_match_stats (results['match_tp'])
-    force_cpu: bool
-        if True, prevents running computations on gpu. I added this because my gpu is too small which causes problems ):
+    device: str
+        Determines which device is used.
+        'cpu': cpu
+        'cuda': CUDA-compatible gpu, if available, otherwise cpu will be used.
 
 
     Returns
@@ -390,7 +405,7 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, force_cpu=
         or the distance from each false negative to the nearest predicted pixel(FN_distances).
     """
 
-    if torch.cuda.is_available() and not force_cpu:
+    if device.lower() == 'cuda' and torch.cuda.is_available():  # handle case where gpu is selected but unavailable
         device = 'cuda'
     else:
         device = 'cpu'
@@ -445,15 +460,15 @@ def mask_edge_distance(gt_mask, pred_mask, gt_box, pred_box, matches, force_cpu=
     return FP_distances, FN_distances
 
 
-def match_perf_iset(gt, pred, match_results=None, colormap=None, tp_gt=False):
+def det_perf_iset(gt, pred, match_results=None, colormap=None, tp_gt=False):
     """
-    Stores match true positives, false positives, and false negatives in an instance set for visualization.
+    Stores detection true positives, false positives, and false negatives in an instance set for visualization.
 
     Computes matches between gt and pred masks (unless match_results is supplied).
     Returns an instance set object containing the masks, boxes, and colors for true positive (matched,)
     false positive (unmatched pred) and false negative (unmatched gt) instances. Colors correspond to each
-    class of instance. The instance set can be visualized using visualize.quick_visualize_iset() to evaluate
-    the performance of a model on matching instances.
+    class of instance. The instance set can be visualized using visualize.visualize_iset() to evaluate
+    the detection performance of a model.
 
     Parameters
     ---------------
@@ -532,16 +547,16 @@ def match_perf_iset(gt, pred, match_results=None, colormap=None, tp_gt=False):
     return iset
 
 
-def mask_perf_iset(gt_masks, pred_masks, match_results=None, mode='reduced'):
+def seg_perf_iset(gt_masks, pred_masks, match_results=None, mode='reduced'):
     """
-    Stores mask true positives, false positives, and false negatives in an instance set for visualization.
+    Stores segmentation true positives, false positives, and false negatives in an instance set for visualization.
 
     Computes matches between gt and pred masks (unless match_results is supplied).
     Returns an instance set object containing the masks, boxes, and colors for true positive (included in
     both gt and pred masks that are matched), false positive (included in pred but not gt) and false negative
     (included in gt but not pred), and other(the same pixel is included in multiple instances due to overlap).
     Colors correspond to each class of instance.
-    The instance set can be visualized using visualize.quick_visualize_iset() to evaluate the quality of matched
+    The instance set can be visualized using visualize.visualize_iset() to evaluate the quality of matched
     instances.
 
     Parameters

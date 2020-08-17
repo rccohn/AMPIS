@@ -1,0 +1,14 @@
+AMPIS powder example.
+
+Copyright (c) 2020, Ryan Cohn and Elizabeth Holm. All rights reserved.
+
+The VGG Image Annotator (via.html) was used to produce the annotations needed for this experiment.
+The license information for the via software is located in via-LICENSE.
+
+The labels are provided as-is as an example of how to perform instance segmentation on images of 
+materials data. If you use this example or this software for your work, please cite the publication
+below.
+
+TODO update with citation information once paper is published.
+
+Data labels created by Ryan Cohn.

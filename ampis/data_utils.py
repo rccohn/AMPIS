@@ -1,6 +1,12 @@
+# Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
+# Licensed under the MIT License (see LICENSE for details)
+# Written by Ryan Cohn
 """
-Miscellaneous tools, mostly used for model training.
-Also provides the AmpisTrainer, which can get loss statistics on a validation set during training.
+Provides tools for loading labeled data, model training,
+and formatting model outputs for storage, visualization, and analysis.
+
+Also provides the AmpisTrainer, which can get loss statistics on a
+validation set during training.
 """
 import datetime
 import json
@@ -250,7 +256,8 @@ def compress_pred(pred):
     Parameters
     -------
     pred: detectron2 Instances
-        outputs that will be compressed.
+        Outputs to be compressed. Outputs are obtained by
+         calling detectron2 predictor on an image.
  
     Returns
     -------
@@ -258,10 +265,12 @@ def compress_pred(pred):
         pred with masks compressed to RLE format and other outputs converted to numpy.
 
     """
+
+    # compress segmentation masks to RLE
     pred.pred_masks = [RLE.encode(np.asfortranarray(x.to('cpu').numpy())) for x in pred.pred_masks]
-    pred.pred_boxes = pred.pred_boxes.tensor.to('cpu').numpy()
-    pred.scores = pred.scores.to('cpu').numpy()
-    pred.pred_classes = pred.pred_classes.to('cpu').numpy()
+    pred.pred_boxes = pred.pred_boxes.tensor.to('cpu').numpy()  # move box coords to numpy array
+    pred.scores = pred.scores.to('cpu').numpy()  # move scores to numpy array
+    pred.pred_classes = pred.pred_classes.to('cpu').numpy()  # move class idx to numpy array
     return pred
 
 
@@ -301,6 +310,10 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
     Reads images and their corresponding ground truth annotations in a format AMPIS can use.
 
     Data-dicts are read for single-class instance segmentation labels.
+    Currently, this only works for single-class sets of labels (ie all category_id labels are loaded as 0.)
+    Extending it to multi-class labels should be straightforward but depends on the format of how the class
+    labels are stored.
+
     Annotations can be stored in the following format, specified by *label_fmt*.
       * binary: Annotations are stored in separate images or numpy files. Annotation images must be the same size as
                 the original images. In these images, background pixels are labeled 0, and pixels included in instances
@@ -388,7 +401,7 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
                 annotations.append({'bbox': bbox,
                                     'bbox_mode': BoxMode.XYXY_ABS,
                                     'segmentation': mask,
-                                    'category_id': 0})
+                                    'category_id': 0})  # TODO read categories and generate metadata for multi-class
 
             ddict['annotations'] = annotations
             ddict['num_instances'] = len(annotations)
@@ -434,7 +447,7 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
                     'bbox': np.asarray((np.min(px), np.min(py), np.max(px), np.max(py))),
                     'bbox_mode': BoxMode.XYXY_ABS,
                     'segmentation': [poly],
-                    'category_id': 0,
+                    'category_id': 0,  # TODO come up with system for storing and reading metadata for multi-class
                 }
                 annotations.append(annotation)
             ddict['annotations'] = annotations

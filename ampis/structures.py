@@ -1,6 +1,9 @@
+# Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
+# Licensed under the MIT License (see LICENSE for details)
+# Written by Ryan Cohn
 """
 Provides convenient data structures and methods for working with different masks
-and collections of instances. Inspired by detectron2.structures.
+and collections of instances.
 """
 import copy
 import numpy as np
@@ -534,6 +537,7 @@ class InstanceSet(object):
 
         if keys is None:  # use default values
             keys = ['area', 'equivalent_diameter', 'major_axis_length', 'perimeter', 'solidity', 'orientation']
+        # TODO do this with multiprocessing or joblib.parallel to speed up
         rprops = [skimage.measure.regionprops_table(masks_to_bitmask_array(mask, self.instances.image_size).squeeze()
                                                     .astype(np.int), properties=keys) for mask in self.instances.masks]
         df = pd.DataFrame(rprops)

@@ -1,3 +1,16 @@
+# Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
+# Licensed under the MIT License (see LICENSE for details)
+# Written by Ryan Cohn
+"""
+Contains tools for characterizing powder samples from images.
+
+The PowderSatelliteImage class can be used to pair masks for
+satellites and powder particles from the same image to estimate
+the satellite content of samples.
+
+The psd function can be used to measure the size distribution of
+a set of particles from the segmentation masks.
+"""
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
@@ -205,7 +218,7 @@ class PowderSatelliteImage(object):
         iset = InstanceSet(instances=instances)
         iset.instances.colors = visualize.random_colors(len(iset.instances), iset.randomstate)
 
-        visualize.quick_visualize_iset(img, label_map, iset, ax=ax)
+        visualize.visualize_iset(img, label_map, iset, ax=ax)
 
     def compute_satellite_metrics(self):
         """
