@@ -65,7 +65,8 @@ def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
     Displays the image in img_path. Overlays the bounding boxes and segmentation masks of each instance in the image.
 
     Parameters
-    ----------
+    -------------
+
     ddict: list(dict) or
         for ground truth- data dict containing masks. The format of ddict is described below in notes.
 
@@ -76,8 +77,7 @@ def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
     dataset: str
         name of dataset, included in filename and figure title.
         The dataset should be registered in both the DatasetCatalog and MetadataCatalog
-        for proper plotting.
-        (see detectron2 datasetcatalog for more info.)
+        for proper plotting. (see detectron2 datasetcatalog for more info.)
 
 
     gt: bool
@@ -95,42 +95,38 @@ def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
         If True, prints summary of the ddict to terminal
 
     Returns
-    -------
+    -------------
     None
 
     Notes
-    -------
+    -------------
     Ddict should have the following format:
-    {
-    'file_name': str or Path object
+      -'file_name': str or Path object
                 path to image corresponding to annotations
-    'mask_format': str
+      -'mask_format': str
                   'polygonmask' if segmentation masks are lists of XY coordinates, or
                   'bitmask'  if segmentation masks are RLE encoded segmentation masks
-    'height': int
+      -'height': int
             image height in pixels
-    'width': int
+      -'width': int
             image width in pixels
-    'annotations': list(dic)
+      -'annotations': list(dic)
                     list of annotations. See the annotation format below.
-    'num_instances': int
+      -'num_instances': int
                 equal to len(annotations)- number of instances present in the image
-    }
 
 The dictionary format for the annotation dictionaries is as follows:
-    {
-    'category_id': int
+    -'category_id': int
                     numeric class label for the instance.
-    'bbox_mode': detectron2.structures.BoxMode object
+    -'bbox_mode': detectron2.structures.BoxMode object
                 describes the format of the bounding box coordinates.
                 The default is BoxMode.XYXY_ABS.
-    'bbox':  list(int)
+    -'bbox':  list(int)
             4-element list of bbox coordinates
-    'segmentation': list
+    -'segmentation': list
                     list containing:
                       * a list of polygon coordinates (mask format is polygonmasks)
                       * dictionaries  of RLE mask encodings (mask format is bitmasks)
-    }
 
     """
     if img_path is None:
@@ -194,12 +190,12 @@ def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=Fal
         If None, metadata (ie string class labels) will not be shown on image. Else, metadata
         contains the metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
         following structure:
-        {
-        'thing_classes': list
+
+        - 'thing_classes': list
             list of strings corresponding to integer indices of class labels.
             For example, if the classes are 0 for 'particle' and 1 for 'satellite',
             then metadata['thing_classes'] = ['particle','satellite']
-        }
+
 
     show_class_idx: bool
         if True, displays the class label (metadata['thing_classes'][class_idx]) on each instance in the image
@@ -233,36 +229,33 @@ def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=Fal
     Notes
     -------
     Ddict should have the following format:
-    {
-    'file_name': str or Path object
+
+      -'file_name': str or Path object
                 path to image corresponding to annotations
-    'mask_format': str
+      -'mask_format': str
                   'polygonmask' if segmentation masks are lists of XY coordinates, or
                   'bitmask'  if segmentation masks are RLE encoded segmentation masks
-    'height': int
+      -'height': int
             image height in pixels
-    'width': int
+      -'width': int
             image width in pixels
-    'annotations': list(dic)
+      -'annotations': list(dic)
                     list of annotations. See the annotation format below.
-    'num_instances': int
+      -'num_instances': int
                 equal to len(annotations)- number of instances present in the image
-    }
 
 The dictionary format for the annotation dictionaries is as follows:
-    {
-    'category_id': int
+      -'category_id': int
                     numeric class label for the instance.
-    'bbox_mode': detectron2.structures.BoxMode object
+      -'bbox_mode': detectron2.structures.BoxMode object
                 describes the format of the bounding box coordinates.
                 The default is BoxMode.XYXY_ABS.
-    'bbox':  list(int)
-            4-element list of bbox coordinates
-    'segmentation': list
+      -'bbox':  list(int)
+                4-element list of bbox coordinates
+      -'segmentation': list
                     list containing:
-                      * a list of polygon coordinates (mask format is polygonmasks)
-                      * dictionaries  of RLE mask encodings (mask format is bitmasks)
-    }
+                      - a list of polygon coordinates (mask format is polygonmasks)
+                      - dictionaries  of RLE mask encodings (mask format is bitmasks)
 
     """
 

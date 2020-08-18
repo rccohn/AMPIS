@@ -102,52 +102,46 @@ class InstanceSet(object):
     Ensures that formatting is consistent for convenient analysis.
 
     Attributes
-    ---------
-    mask_format: str
-        can be 'polygon' or 'bitmask'. Indicates the format in which the masks are stored consistent
-        with the formats used in detectron2.
+    -----------
+        mask_format: str or None
+            'bitmask' for RLE encoded bitmasks or 'polygon' for polygon masks.
 
-    bbox_mode: detectron2.structures.BoxMode
-        Indicates how the boxes are stored. For this package it should pretty much always be
-        BoxMode.XYXY_ABS.
+        bbox_mode: detectron2.structures.BoxMode or None
+            indicates format in which bbox coords are stored. Should usually be BoxMode.XYXY_ABS.
+        filepath: str, Path, or None
+            path or filename of image which masks correspond to.
 
-    img: ndarray
-        r x c {x 3} array of pixel values of the image for which the InstanceSet contains instances for.
+        annotations: list(dict) or None
+            ddicts containing manual annotations for images (see :py:meth:`data_utils.get_ddicts` for format.)
 
-    filepath: string or Path object
-        path to the image for which the InstanceSet containts instances for.
+        instances: detectron2.structures.Instances object or None
+            contains information about class label, bbox, and segmentation mask for each instance.
+            Also assigns random colors for each instance for visualization.
 
-    dataset_class: str
-        Describes which dataset the data in the InstanceSet belongs to (ie 'training','validation', etc)
+        img: np.ndarray or None
+            image corresponding to annotations or predictions
 
-    pred_or_gt: str
-        'pred' indicates InstanceSet contains model predictions, 'gt' indicates
-        it contains ground truth instance annotations.
+        dataset_class: str or None
+            Describes if the image is in the training, validation, or test set.
 
-    HFW: str or None
-        Horizontal field width of *img.* Contains the value and units separated by a space, eg '100 um'
+        pred_or_gt: str or None
+            'pred' for model predictions, 'gt' for ground truth labels.
 
-    rprops: None or list of skimage.measure.RegionProperties
-        if defined, contains region properties (ie area, perimeter, convex_hull, etc) of each mask.
+        HFW: float or None
+            Horizontal field width of *img.*
 
-    instances: detectron2 Instances
-        contains the instances (segmentation masks, bboxes, class_idx, scores, etc) for the instances.
+        HFW_units: str or None
+            units of length for HFW (ie 'um')
 
-    annotations: list(dic)
-        contains the annotations for the image
-
-    randomstate: None or int
-        if None, a random state is determined from a random integer.
-        If it is an int, this is the seed used to generate random colors for displaying the instances.
-
-    colors: ndarray
-        Array containing (randomly generated) colors used for visualizing the instances.
+        rprops: None or list of skimage.measure.RegionProperties
+            if defined, contains region properties (ie area, perimeter, convex_hull, etc) of each mask.
 
     """
 
     def __init__(self, mask_format=None, bbox_mode=None, filepath=None, annotations=None, instances=None, img=None,
                  dataset_class=None, pred_or_gt=None, HFW=None, HFW_units=None, randomstate=None):
         """
+
         initializes the InstanceSet instance.
 
         Parameters
@@ -186,19 +180,6 @@ class InstanceSet(object):
             if None, a random state is determined from a random integer.
             If it is an int, this is the seed used to generate random colors for displaying the instances.
 
-        Attributes
-        -----------
-
-        img: None or ndarray
-            Initialized to None.
-            When image is loaded, it is stored as a r x c {x 3} array of pixel values of the
-            image for which the InstanceSet contains instances for.
-
-        rprops: None or list of skimage.measure.RegionProperties
-            if defined, contains region properties (ie area, perimeter, convex_hull, etc) of each mask.
-
-        colors: None or ndarray
-            Array containing (randomly generated) colors used for visualizing the instances.
 
         """
         super().__init__()
@@ -236,67 +217,39 @@ class InstanceSet(object):
         Returns
         -----------
         self (optinal): InstanceSet
-            only returned if return_ == True
-
-        Attributes
-        -----------
-        pred_or_gt: str
-            set to 'gt' (it is assumed these are ground truth instances)
-
-        filepath: Path object
-            path to file described by annotations
-
-        mask_format: str
-            read from ddict['mask_format'], either 'bitmask' or 'polygonmask'
-
-        instances: detectron2.structures.Instances object
-            contains information about class label, bbox, and segmentation mask for each instance.
-            Also assigns random colors for each instance for visualization.
-
-        dataset_class: str or None
-            read from ddict['dataset_class'], describes if the image is in the training, validation,
-            or test set.
-
-        HFW: float or None
-            Horizontal field width of *img.*
-
-        HFW_units: str or None
-            units of length for HFW (ie 'um')
-
+            only returned if inplace == False
 
         Notes
         ------
-                Data dicts should have the following format:
-            {
-            'file_name': str or Path object
+
+        Data dicts should have the following format:
+            -'file_name': str or Path object
                         path to image corresponding to annotations
-            'mask_format': str
+            -'mask_format': str
                           'polygonmask' if segmentation masks are lists of XY coordinates, or
                           'bitmask'  if segmentation masks are RLE encoded segmentation masks
-            'height': int
+            -'height': int
                     image height in pixels
-            'width': int
+            -'width': int
                     image width in pixels
-            'annotations': list(dic)
+            -'annotations': list(dic)
                             list of annotations. See the annotation format below.
-            'num_instances': int
+            -'num_instances': int
                         equal to len(annotations)- number of instances present in the image
-            }
 
         The dictionary format for the annotation dictionaries is as follows:
-            {
-            'category_id': int
+            -'category_id': int
                             numeric class label for the instance.
-            'bbox_mode': detectron2.structures.BoxMode object
+            -'bbox_mode': detectron2.structures.BoxMode object
                         describes the format of the bounding box coordinates.
                         The default is BoxMode.XYXY_ABS.
-            'bbox':  list(int)
+            -'bbox':  list(int)
                     4-element list of bbox coordinates
-            'segmentation': list
+            -'segmentation': list
                             list containing:
-                              * a list of polygon coordinates (mask format is polygonmasks)
-                              * dictionaries  of RLE mask encodings (mask format is bitmasks)
-            }
+                               - a list of polygon coordinates (mask format is polygonmasks)
+                               - dictionaries  of RLE mask encodings (mask format is bitmasks)
+
         """
 
         # default values-always set
@@ -360,52 +313,32 @@ class InstanceSet(object):
         ----------
         outs: dict
             dictionary of formatted model outputs with the following format:
-            {
-            'file_name': str or Path
+              -'file_name': str or Path
                 filename of image corresponding to predictions
 
-            'dataset': str
+              - 'dataset': str
                 string describing dataset image is in (ie training, validation , test, etc)
 
-            'pred': detectron2.structures.Instances object
-                model outputs formatted with format_outputs(). Should have the following fields:
-                    pred_masks: list
-                            list of dictionaries of RLE encodings for the predicted masks
+              - 'pred': detectron2.structures.Instances object
+                        model outputs formatted with format_outputs(). Should have the following fields:
+                            - pred_masks: list
+                                list of dictionaries of RLE encodings for the predicted masks
 
-                    pred_boxes: ndarray
-                            nx4 array of bounding box coordinates
+                            - pred_boxes: ndarray
+                                nx4 array of bounding box coordinates
 
-                    scores: ndarray
-                        n-element array of confidence scores for each instance (output from softmax of class label)
+                            - scores: ndarray
+                                n-element array of confidence scores for each instance (output from softmax of class label)
 
-                    pred_classes: ndarray
-                        n-element array of integer class indices for each predicted index
+                            - pred_classes: ndarray
+                                n-element array of integer class indices for each predicted index
 
-            }
 
         inplace: bool
             if True, the InstanceSet object is modified in place.
             Otherwise, the object is returned.
-
-        Attributes
-        -----------
-        pred_or_gt: str
-            set to 'gt' (it is assumed these are ground truth instances)
-
-        filepath: Path object
-            path to file described by annotations.
-
-        mask_format: str
-            Assumed to be 'bitmask' for model predictions.
-
-        dataset_class: str
-            string describing if the image was in the training, validation, test set.
-
-        instances: detectron2.structures.Instances object
-            contains information about class label, bbox, and segmentation mask for each instance.
-            Also assigns random colors for each instance for visualization.
-
         """
+
         self.pred_or_gt = 'pred'
         self.mask_format = 'bitmask'  # model outs assumed to be RLE bitmasks
 
@@ -509,7 +442,7 @@ class InstanceSet(object):
 
         Applies skimage.measure.regionprops_table to self.instances.masks for analysis. Allows for convenient
         measurements of many properties of the segmentation masks. A list of available parameters is available in
-        the skimage documentation (see link below.)
+        the skimage documentation (see link below.) Stores results to self.rprops.
 
         Parameters
         ------------
@@ -524,16 +457,13 @@ class InstanceSet(object):
         rprops (optional): DataFrame object
             Pandas dataframe containing region properties. Only returned if input argument return_df=True
 
-        Attributes
-        -------------
-        rprops: DataFrame object
-            dataframe of region properties
-
-        See Also
+        Notes
         ---------------
-        `skimage.measure.regionprops_table <https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops_table>`_
+        `scikit image regionprops_table
+        <https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops_table>`_
 
         """
+
 
         if keys is None:  # use default values
             keys = ['area', 'equivalent_diameter', 'major_axis_length', 'perimeter', 'solidity', 'orientation']

@@ -213,8 +213,8 @@ def det_seg_scores(gt, pred, iou_thresh=0.5, size=None):
 
     Detection scores are calculated for the whole set of masks and  describe the number of
     instances that were correctly matched with IOU above the threshold. True positives are
-     atched masks, false positives are unmatched predicted masks, and false negatives are
-     unmatched ground truth masks.
+    matched masks, false positives are unmatched predicted masks, and false negatives are
+    unmatched ground truth masks.
 
     Segmentation scores are calculated for each matched pair of masks and  describe how well
     the pair of masks agree with each other. In each matched pair of masks, true positives
@@ -223,7 +223,7 @@ def det_seg_scores(gt, pred, iou_thresh=0.5, size=None):
     ground truth mask.
 
     Parameters
-    ________________
+    ------------
     gt, pred: RLEMasks or polygonmasks
         ground truth (gt) or predicted (pred) masks that will be matched to each other to compute the match scores.
 
@@ -232,28 +232,46 @@ def det_seg_scores(gt, pred, iou_thresh=0.5, size=None):
     size: None or tuple(int, int)
         size passed to masks_to_rle. Can be None for rle masks or bitmasks. For polygonmasks, must be
                 tuple (r, c) for the image height and width in pixels, respectively.
-    
+
     Returns
     ---------------
     output: dictionary
-        Contains the following key:value pairs:
-          'det_precision': float between 0 and 1, detection precision for instances
+        Match results. See `Notes` for detailed information on the format of the dictionary.
+
+
+    Notes
+    -------------
+    The format of the output dictionary is as follows:
+
+              {'det_precision': float between 0 and 1, detection precision for instances
+
           'det_recall': float between 0 and 1, detection recall for instances
+
           'seg_precision': n_match element array containing the segmentation precision scores
                            for each matched pair of instances.
+
             'seg_recall': n_match element array containing the segmentation recall scores
                           for each matched pair of instances.
+
             'det_tp' : n_match x 2 array of indices of the ground truth and predicted instances that were matched,
-                         respectively. For example, match_tp[i] gives [gt_idx, pred_idx] for the i'th detection match.
+                       respectively. For example, match_tp[i] gives [gt_idx, pred_idx] for the i'th detection match.
+
             'det_fn' : n_fn element array of detection false negative masks.
+
             'det_fp' : n_fp element array of detection false positive masks.
+
             'seg_tp': n_match element array containing the total number of segmentation true positives
                       for each matched pair of masks.
+
             'seg_fn': n_match element array of containing the total number of segmentation false negatives
                       for each matched pair of masks.
+
             'seg_fp': n_match element array of containing the total number of segmentation false positives
                       for each matched pair of masks.
-            'det_tp_iou': n_match element array of IOU scores for each detection true positive
+
+            'det_tp_iou': n_match element array of IOU scores for each detection true positive}
+
+
     """
     # detection instance matching
     gtmasks = masks_to_rle(gt, size)
@@ -309,7 +327,7 @@ def merge_boxes(box1, box2):
     can be accessed by im[r1:r2,c1:c2].
 
 
-    Paramaters
+    Parameters
     -----------
         box1, box2: ndarray
             4-element array of the form [r1, r2, c1, c2], the indices of the

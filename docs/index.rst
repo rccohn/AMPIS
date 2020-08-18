@@ -5,4 +5,5 @@ AMPIS: Automated Materials Particle Instance Segmentation
    :maxdepth: 2
 
    tutorials/index
+   modules/index 
 

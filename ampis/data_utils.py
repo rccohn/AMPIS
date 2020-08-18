@@ -183,6 +183,7 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
     For a boolean numpy array, bounding boxes are extracted from the min and max x and y coordinates containing
     pixels in each mask. Masks and boxes can be formatted for use with either  detectron2 (default) or
     the matterport visualizer.
+
     Detectron2 formatting:
         masks: n_mask x r x c boolean array
         boxes: (x0,y0,x1,y1) floating point box coordinates
@@ -194,12 +195,15 @@ def extract_boxes(masks, mask_mode='detectron2', box_mode='detectron2'):
     ----------
         masks: ndarray
             boolean array of masks. Can be 2 dimensions for 1 mask or 3 dimensions for array of masks.
+
         mask_mode: str
             if 'detectron2,' masks are shape n_mask x r x c.
             if 'matterport,' masks are r x c x n_masks.
+
         box_mode: str
             if 'detectron2', boxes will be returned in [x1,y1,x2,y2] floating point format. (XYXY_ABS box mode)
             if 'matterport,' boxes will be returned in [y1,y2,x1,x2] integer format.
+
 
     Returns
     ---------
@@ -254,13 +258,13 @@ def compress_pred(pred):
     Results in significantly smaller data structures that are easier to store and load into memory.
 
     Parameters
-    -------
+    --------------
     pred: detectron2 Instances
         Outputs to be compressed. Outputs are obtained by
          calling detectron2 predictor on an image.
  
     Returns
-    -------
+    ------------
     pred_compressed: detectron2 Instances
         pred with masks compressed to RLE format and other outputs converted to numpy.
 
