@@ -59,6 +59,6 @@ The detection and segmentation results can also be visualized by first calling `
 
 Up until now, this process has been entirely computer vision. But AMPIS was designed for materials scientists! After training the model and generating predictions, it's time to use the model for scientific exploration!
 
-InstanceSet objects contain the segmentation masks for each image. We can gather some information from these directly. Calling `iset.compute_rprops()` returns a table of mesaurements of the masks using `skimage.measure.rprops_table()`. The full list of available quantities that can be measured is avaliable [https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops]()).
+InstanceSet objects contain the segmentation masks for each image. We can gather some information from these directly. Calling `iset.compute_rprops()` returns a table of mesaurements of the masks using `skimage.measure.regionprops_table()`. The full list of available quantities that can be measured is avaliable [https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops]()).
 
 For more information, see the documentation. 
