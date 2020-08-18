@@ -61,4 +61,7 @@ Up until now, this process has been entirely computer vision. But AMPIS was desi
 
 InstanceSet objects contain the segmentation masks for each image. We can gather some information from these directly. Calling `iset.compute_rprops()` returns a table of mesaurements of the masks using `skimage.measure.regionprops_table()`. The full list of available quantities that can be measured is avaliable in the [skimage documents](https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops).
 
-For more information, see the documentation. 
+More in-depth analysis requires additional functionality. `ampis.applications` is designated for modules with tools for specific applications. Currently, there is one module- `ampis.applications.powder`. This provides tools for quickly generating particle size distributions from image data as well as the ability to measure the satellite content of powder samples. The implementation of both of these techniques is included in the powder example. Currently this is the only method of directly measuring the satellite contents in powder samples, demonstrating the utility of instance segmentation for applications in materials characterization and quality control! 
+
+## Documentation
+For more information, see the [AMPIS documentation](). 
