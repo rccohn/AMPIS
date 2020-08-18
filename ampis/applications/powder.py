@@ -218,7 +218,7 @@ class PowderSatelliteImage(object):
         iset = InstanceSet(instances=instances)
         iset.instances.colors = visualize.random_colors(len(iset.instances), iset.randomstate)
 
-        visualize.visualize_iset(img, label_map, iset, ax=ax)
+        visualize.display_iset(img, iset, label_map, ax=ax)
 
     def compute_satellite_metrics(self):
         """

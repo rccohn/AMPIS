@@ -57,8 +57,8 @@ def random_colors(n, seed, bright=True):  # controls randomstate for plotting co
     return colors
 
 
-def visualize_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
-                     suppress_labels=False, summary=True):
+def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
+                   suppress_labels=False, summary=True):
     """
     Visualize gt annotations overlaid on the image.
 
@@ -173,8 +173,8 @@ The dictionary format for the annotation dictionaries is as follows:
         print(summary_string)
 
 
-def visualize_iset(img, iset, metadata=None, show_class_idx=False, show_scores=False, ax=None, colors=None,
-                   apply_correction=False):
+def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=False, ax=None, colors=None,
+                 apply_correction=False):
     """
     Visualize instances in *iset* overlaid on image *img*.
 

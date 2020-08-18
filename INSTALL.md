@@ -1,4 +1,5 @@
 # Installation
+AMPIS depends on several packages, including PyTorch and Detectron2. The PyTorch installation depends on the available CUDA environment. Detectron2 depends on both the PyTorch installation and available CUDA environment. Therefore, the process is as follows. First, clone the repository, create a virtual environment, and install the standard python packages used by AMPIS. Then, install PyTorch according to your system. Next, install the corresponding Detectron2 build. Finally, install AMPIS. 
 
 ## 1) Clone git repository
 ```bash
@@ -16,14 +17,14 @@ source ampis_env/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4) Install torch and torchvision
+## 4) Install PyTorch and TorchVision
 The version of torch and torchvision will depend on your system and cuda installation. For more information, see https://pytorch.org/.
 
 For example, for installing pytorch 1.5 and the compatible version of torchvision for CUDA 10.1:
 ```bash
 pip install torch==1.5.0+cu101 torchvision==0.6.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 ```
-## 5) Install detectron2
+## 5) Install Detectron2
 The version of detectron2 will depend on the versions of pytorch and CUDA installed on your system.
 There are different methods of installation. For Linux, the most straightforward method is to install a pre-built wheel. For other operating systems, detectron2 can be built from source, see their documentation for more info.
 
@@ -42,3 +43,14 @@ After navigating to ` AMPIS/`:
 ```bash
 pip install -e .
 ```
+
+## 7 Verify installation
+To verify everything is correctly installed, open a python terminal and enter the following:
+
+```python
+import torch
+import detectron2
+import ampis
+```
+
+If the modules import without errors, you are good to go!

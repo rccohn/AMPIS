@@ -24,3 +24,10 @@ AMPIS depends on several packages including pytorch and detectron2. These packag
 See INSTALL.md for installation instructions.
 
 # Getting Started
+AMPIS provides a couple examples in the form of jupyter notebooks which demonstrate the process of setting up, training, and evaluating instance segmentation models. 
+The [documentanion]() also contains a comprehensive list of the api.
+See GETTING_STARTED.md for more details.
+
+# Acknowledgements
+
+This work was supported by the National Science Foundation under grant CMMI-1826218 and by the Air Force Research Laboratory under cooperative agreement number FA8650-19-2-5209.

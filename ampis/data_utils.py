@@ -136,12 +136,12 @@ class AmpisTrainer(DefaultTrainer):
     Extents detectron2 DefaultTrainer with validation loss metrics during training.
 
     If you do not have a validation set or do not need the validation metrics during training,
-    just use the DefaultTrainer class.
+    just use the detectron2 DefaultTrainer class.
 
     """
     def __init__(self, cfg, val_dataset=None):
         """
-        initializes the trainer
+        initializes the trainer.
 
         Parameters
         ----------
@@ -276,7 +276,7 @@ def compress_pred(pred):
 
 def format_outputs(filename, dataset, pred):
     """
-    Formats model outputs consistently to make analysis easier later
+    Formats model outputs consistently to make analysis easier later.
 
     Note that this function applies compress_pred() to pred, which modifies
     the instance predictions in-place to drastically reduce the space they take up. See compress_pred() documentation

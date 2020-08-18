@@ -467,7 +467,7 @@ def det_perf_iset(gt, pred, match_results=None, colormap=None, tp_gt=False):
     Computes matches between gt and pred masks (unless match_results is supplied).
     Returns an instance set object containing the masks, boxes, and colors for true positive (matched,)
     false positive (unmatched pred) and false negative (unmatched gt) instances. Colors correspond to each
-    class of instance. The instance set can be visualized using visualize.visualize_iset() to evaluate
+    class of instance. The instance set can be visualized using visualize.display_iset() to evaluate
     the detection performance of a model.
 
     Parameters
@@ -556,7 +556,7 @@ def seg_perf_iset(gt_masks, pred_masks, match_results=None, mode='reduced'):
     both gt and pred masks that are matched), false positive (included in pred but not gt) and false negative
     (included in gt but not pred), and other(the same pixel is included in multiple instances due to overlap).
     Colors correspond to each class of instance.
-    The instance set can be visualized using visualize.visualize_iset() to evaluate the quality of matched
+    The instance set can be visualized using visualize.display_iset() to evaluate the quality of matched
     instances.
 
     Parameters
