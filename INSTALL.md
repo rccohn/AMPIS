@@ -18,14 +18,20 @@ pip install -r requirements.txt
 ```
 Note- you may see some error messages pop up, but this is ok- pip should resolve the conflicts.
 
-## 4) Install PyTorch and TorchVision
+## 4) Install COCO Python API
+Note ```pip install pycocotools``` does not work in some cases, I found this method to be better:
+```bash 
+pip install git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI
+```
+
+## 5) Install PyTorch and TorchVision
 The version of torch and torchvision will depend on your system and cuda installation. For more information, see https://pytorch.org/.
 
 For example, for installing pytorch 1.5 and the compatible version of torchvision for CUDA 10.1:
 ```bash
 pip install torch==1.5.0+cu101 torchvision==0.6.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 ```
-## 5) Install Detectron2
+## 6) Install Detectron2
 The version of detectron2 will depend on the versions of pytorch and CUDA installed on your system.
 There are different methods of installation. For Linux, the most straightforward method is to install a pre-built wheel. For other operating systems, detectron2 can be built from source, see their documentation for more info.
 
@@ -37,7 +43,7 @@ python -m pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wh
 
 More detailed information and additional builds can be found on the [detectron2 installation page](https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md). 
 
-## 6) Install AMPIS
+## 7) Install AMPIS
 The recommended method for installing AMPIS is with pip's 'editable' mode.
 After navigating to ` AMPIS/`:
 
@@ -45,10 +51,11 @@ After navigating to ` AMPIS/`:
 pip install -e .
 ```
 
-## 7 Verify installation
+## 8 Verify installation
 To verify everything is correctly installed, open a python terminal and enter the following:
 
 ```python
+import pycocotools
 import torch
 import detectron2
 import ampis
