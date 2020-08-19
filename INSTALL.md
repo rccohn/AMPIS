@@ -16,6 +16,7 @@ source ampis_env/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
+Note- you may see some error messages pop up, but this is ok- pip should resolve the conflicts.
 
 ## 4) Install PyTorch and TorchVision
 The version of torch and torchvision will depend on your system and cuda installation. For more information, see https://pytorch.org/.
