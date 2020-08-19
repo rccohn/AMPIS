@@ -51,7 +51,7 @@ After navigating to ` AMPIS/`:
 pip install -e .
 ```
 
-## 8 Verify installation
+## 8) Verify installation
 To verify everything is correctly installed, open a python terminal and enter the following:
 
 ```python
