@@ -6,7 +6,6 @@ Contains functions for visualizing images with segmentation masks overlaid.
 """
 import colorsys
 import cv2
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path

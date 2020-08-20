@@ -10,7 +10,6 @@ import numpy as np
 from pathlib import Path
 import pycocotools.mask as rle
 import torch
-import warnings
 
 from detectron2.structures import Instances
 

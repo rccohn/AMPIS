@@ -199,9 +199,14 @@ class InstanceSet(object):
         self.randomstate = randomstate
         self.colors = None
 
+    # TODO fix docstring
     def read_from_ddict(self, ddict, inplace=True):
         """
-        Read ground-truth annotations from data dicts.
+        test
+        """
+        """
+        Read ground truth annotations from data dicts.
+        """"""
 
         Reads data dicts and stores the information as attributes of the InstanceSet object.
         The descriptions of the attributes are provided in the documentation for self.__init__().
@@ -580,8 +585,8 @@ def boxes_to_array(boxes):
 
     Parameters
     ---------------
-    boxes: list, array, or detectron2.structures.Boxes object
-        contains the bounding boxes which will be converted
+    boxes: object
+        list, array, or detectron2.structures.Boxes object that contains the bounding boxes which will be converted
 
     Returns
     ---------
@@ -603,15 +608,15 @@ def boxes_to_array(boxes):
         return boxes.tensor.to('cpu').numpy()
 
 
-# TODO depreciated?
+# TODO fix docstring
 def masks_to_rle(masks, size=None):
     """
     Converts various objects to RLE masks
 
     Parameters
-    ----------
-    masks: list, RLEMasks, or PolygonMasks object
-        masks to convert to RLE.
+    ------------
+    masks: object
+        list, RLEMasks, or PolygonMasks object, masks to convert to RLE.
 
     size: tuple(int, int) or None
         Only needed to be specified for polygon masks.
@@ -619,7 +624,7 @@ def masks_to_rle(masks, size=None):
         into full segmentation masks.
 
     Returns
-    --------
+    ----------
     rle_masks: list(dic)
         list of dictionaries with RLE encodings for each mask
 
@@ -657,10 +662,19 @@ def masks_to_rle(masks, size=None):
 def _poly2mask(masks, size):
     """
     Helper function to convert polygon masks since they can be lists, arrays, or PolygonMask instances
-    Args:
-        masks:
 
-    Returns:
+    Parameters
+    ----------
+    masks: list
+        list of arrays containing polygon coordinates [x0,y0,x1,y1,...,xn,yn]
+
+    size: tuple
+        height, width of mask in pixels
+
+    Returns
+    ---------
+    bitmask_array: ndarray
+        n_mask x height x width array where bitmask_array[i] gives a binary mask
 
     """
     return np.stack([polygon2mask(  # stack along axis 0 to get (n x r x c)
@@ -672,22 +686,21 @@ def _poly2mask(masks, size):
 def masks_to_bitmask_array(masks, size=None):
     """
     Converts various mask types to an n_mask x r x c boolean array of masks.
-
+    
     Parameters
     -----------
-    masks: list,ndarray, RLEMasks, or PolygonMasks object
-        masks to convert to RLE.
+    masks: object
+        list, ndarray, RLEMasks, or PolygonMasks masks to be converted
+
 
     size: tuple(int, int) or None
         Only needed to be specified for polygon masks.
         Tuple containing the image height and width in pixels needed to convert polygon coordinates
         into full segmentation masks.
-
     Returns
     ----------
     mask_array: ndarray
-        n_mask x r x c boolean array of pixel values
-
+    n_mask x r x c boolean array of pixel values
     """
     dtype = type(masks)
 

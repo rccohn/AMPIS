@@ -14,11 +14,9 @@ a set of particles from the segmentation masks.
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
-import pathlib
 import pycocotools.mask as RLE
 import skimage
 import skimage.io
-import sys
 
 
 from detectron2.structures import Instances
