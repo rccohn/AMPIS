@@ -64,4 +64,4 @@ InstanceSet objects contain the segmentation masks for each image. We can gather
 More in-depth analysis requires additional functionality. `ampis.applications` is designated for modules with tools for specific applications. Currently, there is one module- `ampis.applications.powder`. This provides tools for quickly generating particle size distributions from image data as well as the ability to measure the satellite content of powder samples. The implementation of both of these techniques is included in the powder example. Currently this is the only method of directly measuring the satellite contents in powder samples, demonstrating the utility of instance segmentation for applications in materials characterization and quality control! 
 
 ## Documentation
-For more information, see the [AMPIS documentation](https://ampis.readthedocs.io/). 
+For more information, see the documents (docs/ampis_Documentation.pdf, online documents coming soon!) 

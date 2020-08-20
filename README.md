@@ -25,7 +25,7 @@ See INSTALL.md for installation instructions.
 
 # Getting Started
 AMPIS provides a couple examples in the form of jupyter notebooks which demonstrate the process of setting up, training, and evaluating instance segmentation models. 
-The documents (coming soon!) also contains a comprehensive list of the api.
+The documents (see docs/ampis_Documentation.pdf, online documents coming soon!) also contains a comprehensive list of the api.
 See GETTING_STARTED.md for more details.
 
 # Acknowledgements
