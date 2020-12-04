@@ -199,7 +199,7 @@ class InstanceSet(object):
         self.randomstate = randomstate
         self.colors = None
 
-    # TODO fix docstring
+    # TODO make this static method
     def read_from_ddict(self, ddict, inplace=True):
         """
         test
@@ -308,6 +308,7 @@ class InstanceSet(object):
             return self
         return
 
+    # TODO make this static method
     def read_from_model_out(self, outs, inplace=True):
         """
         Read model predictions formatted with data_utils.format_outputs() function.
@@ -439,6 +440,36 @@ class InstanceSet(object):
         instances_filtered = Instances(self.instances.image_size,
                                        **new_instance_fields)
         return instances_filtered
+
+
+    def remove_edge_instances(self,k=1):
+        r"""
+        Removes instances that touch the edge of the image.
+
+        Since images touching the edge may only represent partial objects (ie the real object extends
+        past the end of the image,) removes
+
+        self.instances is modified in place to only include instances whose segmentation masks don't intersect the edge
+        of the image.
+
+        Parameters
+        -----------
+        k: int
+            number of pixels away from edge to be considered edge instance (default: 1)
+        """
+        r, c = self.instances.image_size
+
+        # create mask of True pixels on border, False everywhere else
+        border = np.ones((r, c), dtype=np.bool)
+        border[k:-k, k:-k] = 0
+        border = RLE.encode(np.asfortranarray(border))
+        # boolean mask indicating which instances do not intersect the edge of the images
+        inlier_instances = RLE.area([RLE.merge([border, x], intersect=True)
+                                     for x in masks_to_rle(self.instances.masks, (r, c))]) == 0
+        self.instances = self.instances[inlier_instances]
+
+
+
 
     def compute_rprops(self, keys=None, return_df=False):
         """
@@ -608,7 +639,7 @@ def boxes_to_array(boxes):
         return boxes.tensor.to('cpu').numpy()
 
 
-# TODO fix docstring
+
 def masks_to_rle(masks, size=None):
     """
     Converts various objects to RLE masks

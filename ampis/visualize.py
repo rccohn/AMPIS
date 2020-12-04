@@ -1,7 +1,7 @@
 # Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
 # Licensed under the MIT License (see LICENSE for details)
 # Written by Ryan Cohn
-"""
+r"""
 Contains functions for visualizing images with segmentation masks overlaid.
 """
 import colorsys
@@ -17,7 +17,7 @@ from . import structures
 
 
 def random_colors(n, seed, bright=True):  # controls randomstate for plotting consistentcy
-    """
+    r"""
     Generate random colors for mask visualization.
 
     To get visually distinct colors, generate colors in HSV with uniformly distributed hue and then  convert to RGB.
@@ -58,15 +58,15 @@ def random_colors(n, seed, bright=True):  # controls randomstate for plotting co
 
 def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
                    suppress_labels=False, summary=True):
-    """
+    r"""
     Visualize gt annotations overlaid on the image.
 
     Displays the image in img_path. Overlays the bounding boxes and segmentation masks of each instance in the image.
 
     Parameters
-    -------------
+    ----------
 
-    ddict: list(dict) or
+    ddict: list(dict) or None
         for ground truth- data dict containing masks. The format of ddict is described below in notes.
 
     outpath: str or path-like object, or None
@@ -93,39 +93,48 @@ def display_ddicts(ddict, outpath=None, dataset='', gt=True, img_path=None,
     summary: bool
         If True, prints summary of the ddict to terminal
 
+
     Returns
-    -------------
+    -------
     None
 
     Notes
-    -------------
-    Ddict should have the following format:
-      -'file_name': str or Path object
-                path to image corresponding to annotations
-      -'mask_format': str
-                  'polygonmask' if segmentation masks are lists of XY coordinates, or
-                  'bitmask'  if segmentation masks are RLE encoded segmentation masks
-      -'height': int
-            image height in pixels
-      -'width': int
-            image width in pixels
-      -'annotations': list(dic)
-                    list of annotations. See the annotation format below.
-      -'num_instances': int
-                equal to len(annotations)- number of instances present in the image
+    -----
+    The ddict should have the following format:
 
-The dictionary format for the annotation dictionaries is as follows:
-    -'category_id': int
+    .. code-block:: text
+
+        'file_name': str or Path object
+            path to image corresponding to annotations
+        'mask_format': str
+            'polygonmask' if segmentation masks are lists of XY coordinates, or
+            'bitmask'  if segmentation masks are RLE encoded segmentation masks
+        'height': int
+            image height in pixels
+        'width': int
+            image width in pixels
+        'annotations': list(dic)
+            list of annotations. See the annotation format below.
+        'num_instances': int
+            equal to len(annotations)- number of instances present in the image
+
+
+    The dictionary format for the annotation dictionaries is as follows:
+
+    .. code-block:: text
+
+        'category_id': int
                     numeric class label for the instance.
-    -'bbox_mode': detectron2.structures.BoxMode object
+        'bbox_mode': detectron2.structures.BoxMode object
                 describes the format of the bounding box coordinates.
                 The default is BoxMode.XYXY_ABS.
-    -'bbox':  list(int)
+        'bbox':  list(int)
             4-element list of bbox coordinates
-    -'segmentation': list
+        'segmentation': list
                     list containing:
                       * a list of polygon coordinates (mask format is polygonmasks)
                       * dictionaries  of RLE mask encodings (mask format is bitmasks)
+
 
     """
     if img_path is None:
@@ -169,9 +178,9 @@ The dictionary format for the annotation dictionaries is as follows:
 
 
 def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=False, ax=None, colors=None,
-                 apply_correction=False):
-    """
-    Visualize instances in *iset* overlaid on image *img*.
+                 apply_correction=False, get_img=False):
+    r"""
+    Visualize instances in *iset* overlaid on *img*.
 
     Displays the image and overlays the instances (masks, boxes, labels, etc.) If no axis object is provided to
     *ax*, creates and displays the figure. Otherwise, visualization is plotted on *ax* in place.
@@ -190,10 +199,16 @@ def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=Fal
         contains the metadata passed to detectron2 visualizer. In most cases, this should be a dictionary with the
         following structure:
 
-        - 'thing_classes': list
-            list of strings corresponding to integer indices of class labels.
-            For example, if the classes are 0 for 'particle' and 1 for 'satellite',
-            then metadata['thing_classes'] = ['particle','satellite']
+        .. code-block:: text
+
+            'thing_classes': list
+                list of strings corresponding to integer indices of class labels.
+                For example, if the classes are 0 for 'particle' and 1 for 'satellite',
+                then metadata['thing_classes'] = ['particle','satellite']}
+
+
+    get_img: bool
+        if True, image will be returned as numpy array and no plot will be shown.
 
 
     show_class_idx: bool
@@ -226,35 +241,42 @@ def display_iset(img, iset, metadata=None, show_class_idx=False, show_scores=Fal
     None
 
     Notes
-    -------
-    Ddict should have the following format:
+    -----
+    The ddict should have the following format:
 
-      -'file_name': str or Path object
-                path to image corresponding to annotations
-      -'mask_format': str
-                  'polygonmask' if segmentation masks are lists of XY coordinates, or
-                  'bitmask'  if segmentation masks are RLE encoded segmentation masks
-      -'height': int
-            image height in pixels
-      -'width': int
-            image width in pixels
-      -'annotations': list(dic)
-                    list of annotations. See the annotation format below.
-      -'num_instances': int
-                equal to len(annotations)- number of instances present in the image
+    .. code-block:: text
 
-The dictionary format for the annotation dictionaries is as follows:
-      -'category_id': int
-                    numeric class label for the instance.
-      -'bbox_mode': detectron2.structures.BoxMode object
-                describes the format of the bounding box coordinates.
-                The default is BoxMode.XYXY_ABS.
-      -'bbox':  list(int)
-                4-element list of bbox coordinates
-      -'segmentation': list
-                    list containing:
-                      - a list of polygon coordinates (mask format is polygonmasks)
-                      - dictionaries  of RLE mask encodings (mask format is bitmasks)
+          'file_name': str or Path object
+                    path to image corresponding to annotations
+          'mask_format': str
+                      'polygonmask' if segmentation masks are lists of XY coordinates, or
+                      'bitmask'  if segmentation masks are RLE encoded segmentation masks
+          'height': int
+                image height in pixels
+          'width': int
+                image width in pixels
+          'annotations': list(dic)
+                        list of annotations. See the annotation format below.
+          'num_instances': int
+                    equal to len(annotations)- number of instances present in the image
+
+
+    The dictionary format for the annotation dictionaries is as follows:
+
+      .. code-block:: text
+
+          'category_id': int
+                        numeric class label for the instance.
+          'bbox_mode': detectron2.structures.BoxMode object
+                    describes the format of the bounding box coordinates.
+                    The default is BoxMode.XYXY_ABS.
+          'bbox':  list(int)
+                    4-element list of bbox coordinates
+          'segmentation': list
+                        list containing:
+                          - a list of polygon coordinates (mask format is polygonmasks)
+                          - dictionaries  of RLE mask encodings (mask format is bitmasks)
+
 
     """
 
@@ -314,7 +336,10 @@ The dictionary format for the annotation dictionaries is as follows:
         mask_correction = np.logical_not(bitmasks_reduced)
         vis_img[mask_correction] = img[mask_correction]
 
-    if ax is None:
+    if get_img:
+        return vis_img
+
+    elif ax is None:
         fig, ax = plt.subplots(figsize=(10,7), dpi=150)
         ax.imshow(vis_img)
         ax.axis('off')

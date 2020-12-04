@@ -1,7 +1,7 @@
 # Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved.
 # Licensed under the MIT License (see LICENSE for details)
 # Written by Ryan Cohn
-"""
+r"""
 Contains tools for characterizing powder samples from images.
 
 The PowderSatelliteImage class can be used to pair masks for
@@ -26,7 +26,7 @@ from ..structures import boxes_to_array, mask_areas, masks_to_rle, InstanceSet
 
 
 def _rle_satellite_match(particles, satellites, match_thresh=0.5):
-    """
+    r"""
     Match satellites in an image to their corresponding particles.
 
     Convert particle and satellite masks to RLE format. For each satellite,
@@ -113,12 +113,12 @@ def _rle_satellite_match(particles, satellites, match_thresh=0.5):
 
 
 class PowderSatelliteImage(object):
-    """
+    r"""
     Powder and satellite instance predictions for a single image.
     """
     
     def __init__(self, particles=None, satellites=None, matches=None):
-        """
+        r"""
         Initializes the PowderSatelliteImage instance.
 
         Attributes
@@ -136,7 +136,7 @@ class PowderSatelliteImage(object):
         self.matches = matches  # maps satellites to their corresponding particles, see output of fast_satellite_match()
     
     def compute_matches(self, thresh=0.5):
-        """
+        r"""
         Wrapper for rle_satellite_match. Matches satellite masks to particle masks.
 
         Attributes
@@ -153,7 +153,7 @@ class PowderSatelliteImage(object):
                                             self.satellites.instances, thresh)
         
     def visualize_particle_with_satellites(self, p_idx, ax=None):
-        """
+        r"""
         Visualize single particle with its associated satellites.
 
         Allows for visual verification of satellite matches. Displays
@@ -219,7 +219,7 @@ class PowderSatelliteImage(object):
         visualize.display_iset(img, iset, label_map, ax=ax)
 
     def compute_satellite_metrics(self):
-        """
+        r"""
         Computes the number of satellites and number of particles containing at least one satellite in the image.
 
         The number of particles and number of particles with at least one satellite
@@ -273,7 +273,7 @@ class PowderSatelliteImage(object):
         return results
 
     def copy(self):
-        """
+        r"""
         Return copy of the PowderSatelliteImage object.
 
         Returns
@@ -286,9 +286,8 @@ class PowderSatelliteImage(object):
 
 
 def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None, plot=True, return_results=False):
-    """
+    r"""
     Computes and plots the cumulative particle size distribution from segmentation masks.
-
 
     Parameters
     ----------
@@ -309,9 +308,9 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
         Conversion from pixels to units of length (pixels are assumed to be square.)
         If None, a value will be inferred from the image_size and HFW values from each element in
         *particles*, if it is defined. If a float, the same value will be used for each element in *particles*.
-        Otherwise, distance metrics will be given
-        in terms of pixels. If a tuple, the first element is a value(float) or list of values in the format described
-        above, and the second value is the units of length per one pixel corresponding to the values (ie 'um').
+        Otherwise, distance metrics will be given in terms of pixels. If a tuple, the first element is a
+        value(float) or list of values in the format described above, and the second value is the units of
+        length per one pixel corresponding to the values (ie 'um').
 
     distance: str
         'pixels': mask area/d_eq/V_eq are given in pixles.
@@ -319,11 +318,11 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
 
     ax: matpltotlib axis or None
         If an axis is specified, the psd will be plotted on that axis. Otherwise,
-        if *plot* == True, a new figure will be created and displayed. Otherwise,
+        if plot == True, a new figure will be created and displayed. Otherwise,
         the psd will not be plotted.
 
     plot: bool
-        if True, and *ax*=None, the psd will be ploted on a new figure.
+        if True, and ax == None, the psd will be plotted on a new figure.
 
     return_results: bool
         if True, the x and y values for the PSD
@@ -341,7 +340,9 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
     .. math::
         d_{eq} = 2 * \sqrt(A/\pi)
         V_{eq} = 4/3 * \pi * (d_{eq}/2)^3
+
     """
+
     if type(c) == tuple:  # units are specified with c
         length_units = c[1]
         c = c[0]
@@ -457,30 +458,31 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
         return x, y
 
 def satellite_measurements(psi, print_summary=True, output_dict=False):
-    """
+    r"""
     Measures the satellite content of samples in *psi*.
 
     The measurements are as follows (both printed and returned as dictionary items):
-      * n_images: int
+      - n_images: int
         total number of images included in analysis
-      * n_particles: int
+      - n_particles: int
             total number of particles,
-      * n_satellites: int
+      - n_satellites: int
             total number of matched satellites,
-      * n_satellites_unmatched: int
+      - n_satellites_unmatched: int
             total number of satellites that did not match with a powder particle
-      * n_satellited_particles: int
+      - n_satellited_particles: int
             total number of satellited particles,
-      * sat_frac: float
+      - sat_frac: float
             fraction of satellited particles
-      * mspp: float
+      - mspp: float
             median number of satellites per satellited particle (Median Satellites Per Particle)
+
     Two additional quantities will be returned as dictionary items but not printed. These can be used
     to plot the distribution of the number of satellites per particle.
-      * unique: ndarray
-            unique numbers of satellites per particle across all particles
-      * counts: ndarray
-            relative counts for each element in *unique*.
+      - unique: ndarray
+          unique numbers of satellites per particle across all particles
+      - counts: ndarray
+          relative counts for each element in *unique*.
 
 
     Parameters
