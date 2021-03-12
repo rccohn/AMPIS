@@ -10,10 +10,16 @@ AMPIS started as an effort to segment individual powder particles and satellites
 AMPIS wraps some of the basic functionality of [detectron2](https://github.com/facebookresearch/detectron2) to make it easier to use for people who are not as experienced with deep learning and pytorch. Additionally, AMPIS provides some additional tools that are specific to materials applications.
 
 If you use AMPIS, please cite our work. 
-Ryan Cohn and Elizabeth Holm, AMPIS: Automated Materials Particle Instance Segmentation, Carnegie Mellon University Department of Materials Science and Engineering, 2020.
-
-(We will have a paper coming out soon, TODO update citation when it is ready.)
- 
+```
+@article{cohn2021instance,
+      title={Instance Segmentation for Direct Measurements of Satellites in Metal Powders and Automated Microstructural Characterization from Image Data}, 
+      author={Ryan Cohn and Iver Anderson and Tim Prost and Jordan Tiarks and Emma White and Elizabeth Holm},
+      year={2021},
+      eprint={2101.01585},
+      archivePrefix={arXiv},
+      primaryClass={cond-mat.mtrl-sci}
+}
+```
   
 Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved. \
 Licensed under the MIT License (see LICENSE for details)
