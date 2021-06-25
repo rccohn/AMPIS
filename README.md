@@ -30,6 +30,8 @@ AMPIS depends on several packages including pytorch and detectron2. These packag
 See INSTALL.md for installation instructions.
 
 # Getting Started
+new: AMPIS demo is available on [Google Colab](https://colab.research.google.com/drive/1bldlHa3-6_GL-C3sOF2B8qsCPBz2iBUR?usp=sharing). For most people, this will be the easiest and fastest way of getting up and running.
+
 AMPIS provides a couple examples in the form of jupyter notebooks which demonstrate the process of setting up, training, and evaluating instance segmentation models. 
 The documents (see docs/ampis_Documentation.pdf, online documents coming soon!) also contains a comprehensive list of the api.
 See GETTING_STARTED.md for more details.
