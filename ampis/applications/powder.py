@@ -325,14 +325,17 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
         if True, and ax == None, the psd will be plotted on a new figure.
 
     return_results: bool
-        if True, the x and y values for the PSD
-
+        if True, the x and y values and labels for the PSD will be returned in a dictionary.
 
     Returns
     -------
-    x, y: ndarray
-        Optional, only returned if *return_values*==True. n-element arrays containing the
-        x and y values of the psd, respectively.
+    results: dict
+        Only returned if return_results == True
+        dictionary of results with the following key-value pairs
+        {'x': ndarray of x values,
+         'y': ndarray of y values,
+         'x_label': str, description of x (ie "Equivalent diameter, um")
+         'y_label': str, description of y (ie "cumulative volume fraction")}
 
     Notes
     ------
@@ -455,7 +458,7 @@ def psd(particles, xvals='d_eq', yvals='cvf', c=None, distance='length', ax=None
         plt.show()
 
     if return_results:
-        return x, y
+        return {'x':x, 'y':y,'x_label':xlabel,'y_label':ylabel}
 
 def satellite_measurements(psi, print_summary=True, output_dict=False):
     r"""
