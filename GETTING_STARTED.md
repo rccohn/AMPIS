@@ -1,6 +1,6 @@
 Getting Started
 ================
-new: AMPIS demo is available on [Google Colab](https://colab.research.google    .com/drive/1bldlHa3-6_GL-C3sOF2B8qsCPBz2iBUR?usp=sharing). For most people,     this will be the easiest and fastest way of getting up and running.
+new: AMPIS demo is available on [Google Colab](https://colab.research.google.com/drive/1bldlHa3-6_GL-C3sOF2B8qsCPBz2iBUR?usp=sharing). For most people,     this will be the easiest and fastest way of getting up and running.
 
 AMPIS provides comprehensive example for data preparation, training, and evaluating instance segmentation models in `examples/powder` and `examples/spheroidite`. The powder example is the most comprehensive and shows how instance segmentation can be applied to measure powder samples on a particle-by-particle basis.   The spheroidite example shows the process for data formatted in a different way and shows how this technique can be used for segmentation of microconstituents in steel. 
 
