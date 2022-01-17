@@ -475,10 +475,12 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
 
         im_root=Path(im_root)
         with open(im_root, 'r') as f:
-            masks=json.load(f)
+            data=json.load(f)
         # encode strings back to binary that can be decoded with pycocotools
-        for i, mask in enumerate(masks):
-            masks[i]['segmentation']['counts'] = mask['segmentation']['counts'].encode('utf-8')
+        for i, anns in enumerate(data): # for every set of annotations (ie different images)
+            for j, ann in enumerate(anns): # for every individual annotations
+                data[i]['annotations'][j]['segmentation']['counts'] = \
+                    ann['segmentation']['counts'].encode('utf-8')
         
         
 
@@ -487,7 +489,7 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
             n=Path(p['file_name'])
             img_path=Path(im_root.parent,n)
 
-            ann = p['segmentations']
+            ann = p['segmentation']
             height, width = ann[0]['size'] #grab size of image from first RLE mask
 
             ddict = {'file_name': str(img_path.relative_to(cwd)),  # full path to image file
