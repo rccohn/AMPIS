@@ -17,8 +17,9 @@ in the above command.
 
 ## Step 4: install detectron2
 On linux, detectron2 binaries are avaiable:
-```pip install detectron2 -f \
-  https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html
+```
+pip install detectron2 -f \
+https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html
 ```
 
 For other systems (or other versions,) please see the [Detectron2 docs](https://detectron2.readthedocs.io/en/latest/tutorials/install.html)
