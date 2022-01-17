@@ -1,0 +1,43 @@
+# !/bin/bash
+
+# either run ./container build, delete, or run
+CNAME="rccohn/ampis"
+SOURCE_ROOT="../" # directory contains spparks2graph source code, and setup.py
+
+for arg in "$@"
+do
+	case $arg in
+		-b | --build | build)
+        # build container with default arguments
+        
+        # since docker can't take files from outside of build context, 
+        # we have to copy them first.
+        # to prevent using an older version of spparks2graph, 
+        # the files are deleted after the container is built
+		echo "building image"
+		docker build -t ${CNAME} .
+		shift
+		;;
+		esac
+	case $arg in
+		-d| --delete | delete)
+		echo "deleting image"
+		docker rmi --force ${CNAME} 
+		shift
+		;;
+		esac
+	case $arg in
+		-r | --run | run)
+		echo "running container with GPU (use -R to run without GPU)"
+		docker run --rm --gpus=all -itd --name ampis  ${CNAME}
+		shift
+		;;
+		esac
+	case $arg in
+		-R | --Run | Run)
+		echo "running container without GPU (use -r to run with GPU)"
+		docker run --rm -itd --name ampis  ${CNAME}
+		shift
+		;;
+		esac
+done
