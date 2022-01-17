@@ -1,4 +1,4 @@
-jupyterlab==2.2.4
+jupyterlab==2.2.10
 matplotlib==3.2.1
 numpy==1.18.4
 opencv-python==4.2.0.34
