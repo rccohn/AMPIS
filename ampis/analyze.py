@@ -80,16 +80,31 @@ def _piecewise_iou(a, b, interval=80):
     jmax = len(b)
     target = np.zeros((imax, jmax))
 
-    n_seg_a = imax // interval + int(imax % interval > 0)
-    n_seg_b = jmax // interval + int(jmax % interval > 0)
+    # {i,j}max // interval: number of full segments
+    # int(bool({i,j}max % interval): if there are any remaining masks,
+    #                               add 1 extra segment
+    n_seg_a = imax // interval + int(bool(imax % interval))
+    n_seg_b = jmax // interval + int(bool(jmax % interval))
 
+    # we don't use crowding in iou() so set is_crowd to False
+    _is_crowd=np.zeros(interval, bool)
     for i in range(n_seg_a):
-        i_int = interval * np.array([i, i+1], np.int)
+        # select subset of masks in a
+        i1 = interval * i
+        i2 = min(i1+interval, imax)
+        a_masks = a[i1:i2]
+
+        # ensure is_crowd matches length of a
+        is_crowd = _is_crowd[:i2-i1]
+        
         for j in range(n_seg_b):
-            j_int = interval * np.array([j, j+1], np.int)
-            a_args = a[i_int[0]:i_int[1]]
-            b_args = b[j_int[0]:j_int[1]]
-            target[i_int[0]:i_int[1], j_int[0]:j_int[1]] = rle.iou(a_args, b_args, [False for _ in range(len(b_args))])
+            # select subset of masks in b
+            j1 = interval*j
+            j2 = min(j1+interval, jmax)
+            b_masks = b[j1:j2]
+
+            # compute iou of all pairs of masks between a and b and store
+            target[i1:i2, j1:j2] = rle.iou(a_masks, b_masks, is_crowd)
 
     return target
 
@@ -121,37 +136,43 @@ def _piecewise_rle_match(gt, pred, iou_thresh=0.5, interval=80):
     """
     jmax = len(pred)
 
-    tp = []
-    fn = []
-    iou = []
-    pred_matched = np.zeros(len(pred), np.bool)
+    tp = []  # true positives
+    fn = []  # false negatives
+    iou = []  # iou scores 
+    
+    pred_matched = np.zeros(len(pred), bool)
     n_seg_pred = jmax // interval + int(jmax % interval > 0)
+    
     for gt_idx, gt_mask in enumerate(gt):
         iou_max = 0.
         iou_argmax = -1
+        # find predicted instance with max iou of ground truth image
+        # by iterating through batches
         for j in range(n_seg_pred):
-            j0, j1 = interval * np.array([j, j+1], np.int)
+            j0 = interval * j
+            j1 = j0 + interval
             pred_args = pred[j0:j1]
-            iou_scores_ = rle.iou([gt_mask], pred_args, [False for _ in pred_args])[0]
+            iou_scores_ = rle.iou([gt_mask], pred_args, [False])[0]
             iou_amax_j = np.argmax(iou_scores_)
             iou_max_j = iou_scores_[iou_amax_j]  # max is computed with index relative to subset of data
-
+            # update max iou match
             if iou_max_j > iou_max:
                 iou_max = iou_max_j
                 iou_argmax = iou_amax_j + j0  # offset by j0 so argmax is indexed to predictions instead of subset
-
+        # if max is above threshold, store match
         if iou_max > iou_thresh:
             tp.append([gt_idx, iou_argmax])
             iou.append(iou_max)
             pred_matched[iou_argmax] = True
+        # otherwise, it is a false negative
         else:
             fn.append(gt_idx)
+    # remaining unmatched predicted instances are false positives
+    fp = np.array([x for x, matched in enumerate(pred_matched) if not matched], int)
 
-    fp = np.array([x for x, matched in enumerate(pred_matched) if not matched], np.int)
-
-    results = {'tp': np.asarray(tp, np.int),
-               'fn': np.asarray(fn, np.int),
-               'fp': np.asarray(fp, np.int),
+    results = {'tp': np.asarray(tp, int),
+               'fn': np.asarray(fn, int),
+               'fp': np.asarray(fp, int),
                'iou': np.asarray(iou)}
 
     return results
