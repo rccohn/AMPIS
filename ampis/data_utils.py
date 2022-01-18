@@ -331,6 +331,11 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
       * via2: Annotations are stored in JSON files generated from the VIA Image Annotator (version 2.) The exact format
               for the annotations can be found in the examples/documentation.
 
+      * rle:  Annotations are stored in a JSON filescontaining a list of RLE formatted annotations for each image. The JSON file 
+              shold be a list of dicts with a 'file_name' and 'segmentations' key for each dictionary in the list. Remember to write 
+              to a JSON file, the RLE masks should be decoded with 'utf-8'. The 'file_path' should be relevant with the same parent 
+              as the JSON file.
+
     Parameters
     ----------
 
@@ -477,19 +482,19 @@ def get_ddicts(label_fmt, im_root, ann_root=None, pattern='*', dataset_class=Non
         with open(im_root, 'r') as f:
             data=json.load(f)
         # encode strings back to binary that can be decoded with pycocotools
+        # encode strings back to binary that can be decoded with pycocotools
         for i, anns in enumerate(data): # for every set of annotations (ie different images)
-            for j, ann in enumerate(anns): # for every individual annotations
-                data[i]['annotations'][j]['segmentation']['counts'] = \
-                    ann['segmentation']['counts'].encode('utf-8')
+            for j, ann in enumerate(anns['segmentations']): # for every individual annotations
+                data[i]['segmentations'][j]['counts'] = \
+                    ann['counts'].encode('utf-8')
         
         
-
-        for idx, p in enumerate(masks):
+        for idx, p in enumerate(data):
 
             n=Path(p['file_name'])
             img_path=Path(im_root.parent,n)
 
-            ann = p['segmentation']
+            ann = p['segmentations']
             height, width = ann[0]['size'] #grab size of image from first RLE mask
 
             ddict = {'file_name': str(img_path.relative_to(cwd)),  # full path to image file
