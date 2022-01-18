@@ -98,6 +98,7 @@ def _piecewise_iou(a, b, interval=80):
         is_crowd = _is_crowd[:i2-i1]
         
         for j in range(n_seg_b):
+
             # select subset of masks in b
             j1 = interval*j
             j2 = min(j1+interval, jmax)
@@ -105,6 +106,7 @@ def _piecewise_iou(a, b, interval=80):
 
             # compute iou of all pairs of masks between a and b and store
             target[i1:i2, j1:j2] = rle.iou(a_masks, b_masks, is_crowd)
+
 
     return target
 
@@ -152,7 +154,9 @@ def _piecewise_rle_match(gt, pred, iou_thresh=0.5, interval=80):
             j0 = interval * j
             j1 = j0 + interval
             pred_args = pred[j0:j1]
+
             iou_scores_ = rle.iou([gt_mask], pred_args, [False])[0]
+
             iou_amax_j = np.argmax(iou_scores_)
             iou_max_j = iou_scores_[iou_amax_j]  # max is computed with index relative to subset of data
             # update max iou match
