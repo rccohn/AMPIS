@@ -104,7 +104,7 @@ def _piecewise_iou(a, b, interval=80):
             b_masks = b[j1:j2]
 
             # compute iou of all pairs of masks between a and b and store
-            target[i1:i2, j1:j2] = rle.iou(a_masks, b_masks, is_crowd)
+            target[i1:i2, j1:j2] = rle.iou(b_masks, a_masks, is_crowd).T
 
     return target
 
@@ -152,7 +152,7 @@ def _piecewise_rle_match(gt, pred, iou_thresh=0.5, interval=80):
             j0 = interval * j
             j1 = j0 + interval
             pred_args = pred[j0:j1]
-            iou_scores_ = rle.iou([gt_mask], pred_args, [False])[0]
+            iou_scores_ = rle.iou([pred_args, gt_mask],  [False])[:, 0]
             iou_amax_j = np.argmax(iou_scores_)
             iou_max_j = iou_scores_[iou_amax_j]  # max is computed with index relative to subset of data
             # update max iou match
@@ -694,3 +694,32 @@ def seg_perf_iset(gt_masks, pred_masks, match_results=None, mode='reduced'):
                                                                   'boxes': np.zeros((len(masks), 4))})
 
     return i, colors
+
+
+if __name__ == "__main__":
+    # unit test for piecewise matching, which has had issues after
+    # dependency introduced breaking change at some point...?
+    # generates 4 2x2 masks in each corner of a 4x4 square
+    m1 = rle.encode(np.asfortranarray(
+        np.array([[1, 1, 0, 0], [1, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], np.uint8)))
+    m2 = rle.encode(np.asfortranarray(
+        np.array([[0, 0, 1, 1], [0, 0, 1, 1], [0, 0, 0, 0, ], [0, 0, 0, 0]], np.uint8)))
+    m3 = rle.encode(np.asfortranarray(
+        np.array([[0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 0, 0], [1, 1, 0, 0]], np.uint8)))
+    m4 = rle.encode(np.asfortranarray(
+        np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 1], [0, 0, 1, 1]], np.uint8)))
+    # ground truth: masks in order
+    gt = [m1, m2, m3, m4]
+    # predicted: missing mask 1, other masks correctly predicted in different order
+    pred = [m3, m2, m4]
+    # compute iou scores
+    assert np.all(_piecewise_iou(gt, pred) == np.array([[0, 0, 0],
+                                                        [0, 1, 0],
+                                                        [1, 0, 0],
+                                                        [0, 0, 1]]))
+    # match statistics
+    match = _piecewise_rle_match(gt, pred)
+    assert np.all(match['tp'] == np.array([[1, 1], [2, 0], [3, 2]]))
+    assert np.all(match['fn'] == np.array([0]))  # m1 is unmatched
+    assert np.all(match['fp'] == np.array([]))  # no false positives
+    assert np.all(match['iou'] == np.ones(3))  # correct matches all have iou 1

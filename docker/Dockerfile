@@ -55,8 +55,10 @@ ENV PATH="/root/miniconda/envs/env/bin:${PATH}"
 # installing pip dependencies with options doesn't seem to work in conda yaml
 # so we have an additional requirements file for detectron2 and AMPIS
 COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
 # requirements file does not like -f, so we run install command directly
 RUN pip install detectron2 -f \
   https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.9/index.html
+  
+RUN pip install -r requirements.txt
+
 WORKDIR /home
