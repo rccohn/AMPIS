@@ -1,3 +1,9 @@
+# NOTE due to nvidia key update, apt-get update command does not work
+# key needs to be rotated before the container can be built.
+# This requires multiple changes in the Dockerfile, so I will have to
+# get to this when I have time.
+# more info: 
+# https://forums.developer.nvidia.com/t/notice-cuda-linux-repository-key-rotation/212772
 FROM nvidia/cuda:11.1.1-base-ubuntu18.04
 
 # Set the default shell
