@@ -1,5 +1,6 @@
 # AMPIS
-Additive Manufacturing Powder Instance Segmentation (AMPIS) utilizing Mask R-CNN.
+Automated Materials Particle Instance Segmentation (AMPIS) utilizing Mask R-CNN.
+(previously Additive Manufacturing Powder Instance Segmentation, but we expanded the study to include other materials!)
 
 <img src=".github/particles_screenshot.png" width="300">
 
@@ -8,22 +9,7 @@ The goal of AMPIS is to make instance segmentation more accessible to materials 
 AMPIS started as an effort to segment individual powder particles and satellites in images of powder feedstocks for additive manufacturing applications. However, the technique is very flexible. It was found to be easy to adapt to other potential useful applications such as segmenting microconstituents in steel samples, with very few changes to the code. With many unexplored applications, we wanted to open source the code for anyone interested in this technique for automated image analysis.
 
 AMPIS wraps some of the basic functionality of [detectron2](https://github.com/facebookresearch/detectron2) to make it easier to use for people who are not as experienced with deep learning and pytorch. Additionally, AMPIS provides some additional tools that are specific to materials applications.
-
-If you use AMPIS, please cite our work. 
-```
-@article{cohn2021instance,
-      title={Instance Segmentation for Direct Measurements of Satellites in Metal Powders and Automated Microstructural Characterization from Image Data}, 
-      author={Ryan Cohn and Iver Anderson and Tim Prost and Jordan Tiarks and Emma White and Elizabeth Holm},
-      year={2021},
-      eprint={2101.01585},
-      archivePrefix={arXiv},
-      primaryClass={cond-mat.mtrl-sci}
-}
-```
   
-Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved. \
-Licensed under the MIT License (see LICENSE for details)
-
 
 # Installation
 AMPIS depends on several packages including pytorch and detectron2. These packages must be installed before installing AMPIS.
@@ -39,3 +25,25 @@ See GETTING_STARTED.md for more details.
 # Acknowledgements
 
 This work was supported by the National Science Foundation under grant CMMI-1826218 and by the Air Force Research Laboratory under cooperative agreement number FA8650-19-2-5209.
+
+# Citing this work
+If you use AMPIS, please cite our paper: <https://doi.org/10.1007/s11837-021-04713-y>. 
+```
+@article{Cohn2021,
+   author = {Ryan Cohn and Iver Anderson and Tim Prost and Jordan Tiarks and Emma White and Elizabeth Holm},
+   doi = {10.1007/S11837-021-04713-Y/FIGURES/10},
+   issue = {7},
+   journal = {JOM},
+   month = {7},
+   pages = {2159-2172},
+   publisher = {Springer},
+   title = {Instance Segmentation for Direct Measurements of Satellites in Metal Powders and Automated Microstructural Characterization from Image Data},
+   volume = {73},
+   url = {https://link.springer.com/article/10.1007/s11837-021-04713-y},
+   doi = {10.1007/S11837-021-04713-Y/FIGURES/10},
+   year = {2021},
+}
+
+```
+Copyright (c) 2020 Ryan Cohn and Elizabeth Holm. All rights reserved. \
+Licensed under the MIT License (see LICENSE for details)
